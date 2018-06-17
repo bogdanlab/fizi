@@ -57,15 +57,15 @@ def main(argsv):
     argp.add_argument("--chr",
         help="Perform imputation for specific chromosome.")
     argp.add_argument("--start",
-        help="Perform imputation starting at specific location (in base pairs). Requires --chr to be specified.")
+        help="Perform imputation starting at specific location (in base pairs).  Accepts kb/mb modifiers. Requires --chr to be specified.")
     argp.add_argument("--stop",
-        help="Perform imputation until at specific location (in base pairs). Requires --chr to be specified.")
+        help="Perform imputation until at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
     argp.add_argument("--locations", type=ap.FileType("r"),
         help="Perform imputation at locations listed in bed-formatted file.")
 
     # imputation options
-    argp.add_argument("--window-size", type=int,
-        help="Size of imputation window (in base pairs).")
+    argp.add_argument("--window-size", default="250kb",
+        help="Size of imputation window (in base pairs). Accepts kb/mb modifiers.")
 
     # misc options
     argp.add_argument("--quiet", default=False, action="store_true",
@@ -86,7 +86,9 @@ def main(argsv):
         # setup logging
         FORMAT = "[%(asctime)s - %(levelname)s] %(message)s"
         DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-        log = logging.getLogger("fimpg")
+        #log = logging.getLogger(fimpg.LOG)
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
         fmt = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
 
         # setup log file, but write PLINK-style command first
@@ -97,7 +99,6 @@ def main(argsv):
 
         disk_handler = logging.StreamHandler(disk_log_stream)
         disk_handler.setFormatter(fmt)
-        disk_handler.setLevel(logging.INFO)
         log.addHandler(disk_handler)
 
         # write to stdout unless quiet is set
@@ -108,7 +109,6 @@ def main(argsv):
             sys.stdout.write("Starting log..." + os.linesep)
             stdout_handler = logging.StreamHandler(sys.stdout)
             stdout_handler.setFormatter(fmt)
-            stdout_handler.setLevel(logging.INFO)
             log.addHandler(stdout_handler)
 
         locations = None
@@ -135,6 +135,7 @@ def main(argsv):
                     raise ValueError("Specified --start position must be before --stop position")
             locations = pd.DataFrame({"CHR": [args.chr], "START": [start_bp], "STOP": [stop_bp]})
 
+        window_size = parse_pos(args.window_size, "--window-size")
         # this will override specific location setting
         if args.locations is not None:
             if locations is not None:
@@ -147,7 +148,7 @@ def main(argsv):
 
         # load reference genotype data
         log.info("Preparing reference SNP data")
-        ref = fimpg.parse_plink(args.ref)
+        ref = fimpg.RefPanel.parse_plink(args.ref)
 
         # load functional annotations
         # TBD
@@ -155,17 +156,16 @@ def main(argsv):
         log.info("Starting summary statistics imputation")
         with open("{}.sumstat".format(args.output), "w") as output:
             # for each partition in reference genotype data
-            for idx, partition in enumerate(fimpg.partition_data(gwas, ref, args.window_size, loc=locations)):
-                gwasp, obsV, unobsV = partition
+            for idx, partition in enumerate(fimpg.partition_data(gwas, ref, window_size, loc=locations)):
 
-                # check if we should impute or skip based on some QC...
-                # TBD
+                chrom, start, stop = partition
+                part_ref = ref.subset_by_pos(chrom, start, stop)
+                part_gwas = gwas.subset_by_pos(chrom, start, stop)
 
                 # impute GWAS data for this partition
-                imputed_gwas = fimpg.impute_gwas(gwasp, obsV, unobsV)
-
-                # write to disk
-                fimpg.write_output(imputed_gwas, output, append=bool(idx))
+                imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref)
+                if imputed_gwas is not None:
+                    fimpg.write_output(imputed_gwas, output, append=bool(idx))
 
     except Exception as err:
         log.error(err.message)

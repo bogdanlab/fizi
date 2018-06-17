@@ -1,62 +1,80 @@
 import pandas as pd
+import scipy.stats as stats
 
-__all__ = ["GWAS"]
+import fimpg
 
-class GWAS(object):
+__all__ = ["GWAS", "GWASSeries"]
+
+
+class GWASSeries(pd.Series):
+    @property
+    def _constructor(self):
+        return fimpg.GWASSeries
+
+    @property
+    def _constructor_expanddim(self):
+        return fimpg.GWAS
+
+
+class GWAS(pd.DataFrame):
     """
     Thin wrapper for a pandas DataFrame object containing GWAS summary data.
     Assumes the GWAS data have gone through LDSC munge-sumstat
     """
 
-    CHR = "CHR"
-    SNP = "SNP"
-    BP = "BP"
-    A1 = "A1"
-    A2 = "A2"
-    Z = "Z"
-    P = "P"
-    N = "N"
+    CHRCOL = "CHR"
+    SNPCOL = "SNP"
+    BPCOL = "BP"
+    A1COL = "A1"
+    A2COL = "A2"
+    ZCOL = "Z"
 
-    REQ_COLS = [CHR, SNP, BP, A1, A2, Z, P, N]
+    PCOL = "P"
+    NCOL = "N"
 
-    def __init__(self, gwas_df):
-        self._df = gwas_df
-        for column in GWAS.REQ_COLS:
-            if column not in self._df:
-                raise ValueError("{}-column not found in summary statistics".format(column))
+    NEFFCOL = "NEFF"
+    TYPECOL = "TYPE"
+    ADJR2COL = "ADJ.R2.PRED"
+
+    REQ_COLS = [CHRCOL, SNPCOL, BPCOL, A1COL, A2COL, ZCOL]
+
+    def __init__(self, *args, **kwargs):
+        super(GWAS, self).__init__(*args, **kwargs)
         return
 
-    def __len__(self):
-        return len(self._df)
-
-    def __contains__(self, name):
-        return name in self._df
+    @property
+    def _constructor(self):
+        return fimpg.GWAS
 
     @property
-    def SNPs(self):
-        return self._df[GWAS.SNP].tolist()
+    def _constructor_sliced(self):
+        return fimpg.GWASSeries
 
-    @property
-    def BPs(self):
-        return self._df[GWAS.BP].tolist()
+    def subset_by_pos(self, chrom, start, stop):
+        if pd.api.types.is_string_dtype(self[GWAS.CHRCOL]) or pd.api.types.is_categorical_dtype(self[GWAS.CHRCOL]):
+            chrom = str(chrom)
+        else:
+            chrom = int(chrom)
 
-    @property
-    def CHRs(self):
-        return self._df[GWAS.CHR].tolist()
+        if pd.api.types.is_string_dtype(self[GWAS.BPCOL]):
+            start = str(start)
+            stop = str(stop)
+        else:
+            start = int(start)
+            stop = int(stop)
 
-    @property
-    def Zs(self):
-        return self._df[GWAS.Z].tolist()
+        snps = self.loc[(self[GWAS.CHRCOL] == chrom) & (self[GWAS.BPCOL] >= start) & (self[GWAS.BPCOL] <= stop)]
 
-    @property
-    def Pvals(self):
-        return self._df[GWAS.P].tolist()
-
-    @property
-    def Ns(self):
-        return self._df[GWAS.N].tolist()
+        return GWAS(snps)
 
     @classmethod
     def parse_gwas(cls, stream):
         df = pd.read_csv(stream, delim_whitespace=True)
+        for column in GWAS.REQ_COLS:
+            if column not in df:
+                raise ValueError("{}-column not found in summary statistics".format(column))
+
+        if GWAS.PCOL not in df:
+            df[GWAS.PCOL] = stats.chi2.sf(df[GWAS.ZCOL] ** 2, 1)
+
         return cls(df)
