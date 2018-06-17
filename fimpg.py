@@ -14,11 +14,11 @@ def parse_pos(pos, option):
     Parse a specified genomic position.
     Should be digits followed optionally by case-insensitive Mb or Kb modifiers.
     """
-    match = re.match("^(\d+)(mb|kb)?$", pos, flags=re.IGNORECASE)
+    match = re.match("^(([0-9]*[.])?[0-9]+)(mb|kb)?$", pos, flags=re.IGNORECASE)
     position = None
     if match:
-        pos_tmp = int(match.group(1)) # position
-        pos_mod = match.group(2) # modifier
+        pos_tmp = float(match.group(1)) # position
+        pos_mod = match.group(3) # modifier
         if pos_mod:
             pos_mod = pos_mod.upper()
             if pos_mod == "MB":
@@ -41,7 +41,7 @@ def get_command_string(args):
     rest = args[2:]
     rest_strs = []
     for idx, cmd in enumerate(rest[::2]):
-        rest_strs.append("\t{}".format(cmd) + " " + rest[idx + 1] + os.linesep)
+        rest_strs.append("\t{}".format(cmd) + " " + rest[idx*2 + 1] + os.linesep)
 
     return base + "".join(rest_strs) + os.linesep
 
@@ -86,8 +86,7 @@ def main(argsv):
         # setup logging
         FORMAT = "[%(asctime)s - %(levelname)s] %(message)s"
         DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-        #log = logging.getLogger(fimpg.LOG)
-        log = logging.getLogger()
+        log = logging.getLogger(fimpg.LOG)
         log.setLevel(logging.INFO)
         fmt = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
 
@@ -160,7 +159,15 @@ def main(argsv):
 
                 chrom, start, stop = partition
                 part_ref = ref.subset_by_pos(chrom, start, stop)
+
+                if len(part_ref) == 0:
+                    log.warning("No reference SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
+                    continue
+
                 part_gwas = gwas.subset_by_pos(chrom, start, stop)
+                if len(part_gwas) == 0:
+                    log.warning("No GWAS SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
+                    continue
 
                 # impute GWAS data for this partition
                 imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref)

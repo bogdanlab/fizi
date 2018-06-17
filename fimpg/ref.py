@@ -21,13 +21,16 @@ class RefPanel(object):
         self._geno = geno
         return
 
+    def __len__(self):
+        return len(self._snp_info)
+
     def __str__(self):
         start_chr = self._snp_info[RefPanel.CHRCOL].iloc[0]
         stop_chr = self._snp_info[RefPanel.CHRCOL].iloc[-1]
 
         start_bp = self._snp_info[RefPanel.BPCOL].iloc[0]
         stop_bp = self._snp_info[RefPanel.BPCOL].iloc[-1]
-        return "{}:{} - {}:{}".format(start_chr, start_bp, stop_chr, stop_bp)
+        return "{}:{} - {}:{}".format(start_chr, int(start_bp), stop_chr, int(stop_bp))
 
     @property
     def CHRs(self):

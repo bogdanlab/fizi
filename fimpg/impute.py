@@ -66,9 +66,8 @@ def partition_data(gwas, ref, window_size=250e3, loc=None):
 
 
 def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
-    #log = logging.getLogger(fimpg.LOG)
-    log = logging.getLogger()
-    log.info("Imputing region {}".format(ref))
+    log = logging.getLogger(fimpg.LOG)
+    log.info("Starting imputation at region {}".format(ref))
 
     merged_snps = ref.overlap_gwas(gwas)
     ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
