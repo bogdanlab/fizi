@@ -56,20 +56,21 @@ class GWAS(pd.DataFrame):
         else:
             chrom = int(chrom)
 
-        if pd.api.types.is_string_dtype(self[GWAS.BPCOL]):
-            start = str(start)
-            stop = str(stop)
+        if start is not None and stop is not None:
+            snps = self.loc[(self[GWAS.CHRCOL] == chrom) & (self[GWAS.BPCOL] >= start) & (self[GWAS.BPCOL] <= stop)]
+        elif start is not None and stop is None:
+            snps = self.loc[(self[GWAS.CHRCOL] == chrom) & (self[GWAS.BPCOL] >= start)]
+        elif start is None and stop is not None:
+            snps = self.loc[(self[GWAS.CHRCOL] == chrom) & (self[GWAS.BPCOL] <= stop)]
         else:
-            start = int(start)
-            stop = int(stop)
-
-        snps = self.loc[(self[GWAS.CHRCOL] == chrom) & (self[GWAS.BPCOL] >= start) & (self[GWAS.BPCOL] <= stop)]
+            snps = self.loc[(self[GWAS.CHRCOL] == chrom)]
 
         return GWAS(snps)
 
     @classmethod
     def parse_gwas(cls, stream):
-        df = pd.read_csv(stream, delim_whitespace=True)
+        dtype_dict = {'SNP': str,   'Z': float, 'N': float, 'A1': str, 'A2': str}
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True)
         for column in GWAS.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in summary statistics".format(column))

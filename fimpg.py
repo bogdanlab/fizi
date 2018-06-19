@@ -40,8 +40,14 @@ def get_command_string(args):
     base = "fimpg.py " + " ".join(args[:2]) + os.linesep
     rest = args[2:]
     rest_strs = []
-    for idx, cmd in enumerate(rest[::2]):
-        rest_strs.append("\t{}".format(cmd) + " " + rest[idx*2 + 1] + os.linesep)
+    for cmd in rest:
+        if "--" in cmd:
+            if cmd == "--quiet":
+                rest_strs.append("\t{}".format(cmd) + os.linesep)
+            else:
+                rest_strs.append("\t{}".format(cmd))
+        else:
+            rest_strs.append(" " + cmd + os.linesep)
 
     return base + "".join(rest_strs) + os.linesep
 
@@ -50,18 +56,18 @@ def main(argsv):
     argp = ap.ArgumentParser(description="GWAS summary statistics imputation with functional data.")
 
     # main arguments
-    argp.add_argument("gwas", type=ap.FileType("r"), help="GWAS summary data.")
-    argp.add_argument("ref", help="Path to reference panel PLINK data.")
+    argp.add_argument("gwas", type=ap.FileType("r"),
+        help="GWAS summary data.")
+    argp.add_argument("ref",
+        help="Path to reference panel PLINK data.")
 
     # imputation location options
     argp.add_argument("--chr",
         help="Perform imputation for specific chromosome.")
     argp.add_argument("--start",
-        help="Perform imputation starting at specific location (in base pairs).  Accepts kb/mb modifiers. Requires --chr to be specified.")
+        help="Perform imputation starting at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
     argp.add_argument("--stop",
         help="Perform imputation until at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
-    argp.add_argument("--locations", type=ap.FileType("r"),
-        help="Perform imputation at locations listed in bed-formatted file.")
 
     # imputation options
     argp.add_argument("--window-size", default="250kb",
@@ -69,9 +75,9 @@ def main(argsv):
 
     # misc options
     argp.add_argument("--quiet", default=False, action="store_true",
-        help="Do not print anything to stdout")
+        help="Do not print anything to stdout.")
     argp.add_argument("-o", "--output", default="FIMPG",
-        help="Prefix for output data")
+        help="Prefix for output data.")
 
     args = argp.parse_args(argsv)
 
@@ -110,36 +116,34 @@ def main(argsv):
             stdout_handler.setFormatter(fmt)
             log.addHandler(stdout_handler)
 
-        locations = None
         # perform sanity arguments checking before continuing
+        chrom = None
+        start_bp = None
+        stop_bp = None
         if any(x is not None for x in [args.chr, args.start, args.stop]):
             if args.start is not None and args.chr is None:
                 raise ValueError("Option --start cannot be set unless --chr is specified")
             if args.stop is not None and args.chr is None:
                 raise ValueError("Option --stop cannot be set unless --chr is specified")
 
+            chrom = args.chr
+
             # parse start/stop positions and make sure they're ordered (if exist)
             if args.start is not None:
                 start_bp = parse_pos(args.start, "--start")
             else:
-                start_bp = fimpg.IGNORE_POS
+                start_bp = None
 
             if args.stop is not None:
                 stop_bp = parse_pos(args.stop, "--stop")
             else:
-                stop_bp = fimpg.IGNORE_POS
+                stop_bp = None
 
             if args.start is not None and args.stop is not None:
                 if start_bp >= stop_bp:
                     raise ValueError("Specified --start position must be before --stop position")
-            locations = pd.DataFrame({"CHR": [args.chr], "START": [start_bp], "STOP": [stop_bp]})
 
         window_size = parse_pos(args.window_size, "--window-size")
-        # this will override specific location setting
-        if args.locations is not None:
-            if locations is not None:
-                log.warning("Option --locations overrides previous --chr, --start, --stop options")
-            locations = pd.read_csv(args.locations, delim_whitespace=True)
 
         # load GWAS summary data
         log.info("Preparing GWAS summary file")
@@ -154,9 +158,9 @@ def main(argsv):
 
         log.info("Starting summary statistics imputation")
         with open("{}.sumstat".format(args.output), "w") as output:
-            # for each partition in reference genotype data
-            for idx, partition in enumerate(fimpg.partition_data(gwas, ref, window_size, loc=locations)):
+            partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
 
+            for idx, partition in enumerate(partitions):
                 chrom, start, stop = partition
                 part_ref = ref.subset_by_pos(chrom, start, stop)
 

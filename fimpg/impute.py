@@ -10,7 +10,7 @@ import scipy.stats as stats
 from scipy.linalg import svdvals
 
 
-__all__ = ['effective_size', 'partition_data', 'impute_gwas']
+__all__ = ['impute_gwas']
 
 
 # Base-handling code is from LDSC...
@@ -41,28 +41,10 @@ FLIP_ALLELES = {''.join(x):
                 ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]]))
                 for x in MATCH_ALLELES}
 
-def _iter_loc(loc):
-    """
-    Helper function to enumerate in same fashion as window-size approach
-    """
-    for idx, row in loc.iterrows():
-        yield row.tolist()
-
-    return
 
 def effective_size(mat, eps=1e-6):
     svals = svdvals(mat)
     return np.sum(svals > eps)
-
-
-def partition_data(gwas, ref, window_size=250e3, loc=None):
-    # for each chromosome
-    if loc is None:
-        partitions = ref.partitions_by_chr(window_size)
-    else:
-        partitions = _iter_loc(loc)
-
-    return partitions
 
 
 def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
@@ -74,15 +56,27 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
 
     # compute linkage-disequilibrium estimate
     LD = ref.estimate_LD(ref_snps)
+    obs_flag = ~pd.isna(merged_snps.Z)
+    to_impute = (~obs_flag).values
+    obs = obs_flag.values
 
-    obsZ = merged_snps.loc[~pd.isna(merged_snps.Z)].Z.values
-    to_impute = pd.isna(ref_snps.Z).values
-    obs = (~pd.isna(ref_snps.Z)).values
+    # check for allele flips
+    sset = merged_snps[obs_flag]
+    obsZ = sset.Z.values
+    alleles = sset[fimpg.GWAS.A1COL] + sset[fimpg.GWAS.A2COL] + sset[fimpg.RefPanel.A1COL] + sset[fimpg.RefPanel.A2COL]
+
+    # from LDSC...
+    try:
+        obsZ *= (-1) ** alleles.apply(lambda y: FLIP_ALLELES[y])
+    except KeyError as e:
+        msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
+        msg += 'Did you forget to use --merge-alleles with munge_sumstats.py?'
+        raise KeyError(msg)
 
     nobs = np.sum(obs)
     nimp = np.sum(to_impute)
     if nimp == 0:
-        log.info("No missing SNPs at region {}".format(ref))
+        log.info("Skipping region {}. All SNPs imputed".format(ref))
         return None
 
     # this needs tweaking... we need to check so there exist enough
@@ -110,7 +104,11 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
 
     # compute r2-pred adjusted for effective number of markers used for inference
     n_ref = ref.sample_size
-    p_eff = fimpg.effective_size(obsV)
+
+    # compute effective size
+    svals = svdvals(obsV)
+    p_eff = np.sum(svals > epsilon)
+
     def _r2adj(r2p):
         return max(1 - (1 - r2p) * ((n_ref - 1) / float(n_ref - p_eff - 1)), epsilon)
 
@@ -122,6 +120,7 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
 
     nall = len(gwas)
 
+    # this needs to be cleaned up. at some point just switch to 'standard' columns
     results = dict()
     results[fimpg.GWAS.CHRCOL] = [gwas[fimpg.GWAS.CHRCOL].iloc[0]] * (nimp + nall)
     results[fimpg.GWAS.SNPCOL] = gwas[fimpg.GWAS.SNPCOL].tolist() + imp_snps[fimpg.RefPanel.SNPCOL].tolist()

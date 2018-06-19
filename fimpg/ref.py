@@ -17,6 +17,9 @@ class RefPanel(object):
 
     def __init__(self, snp_info, sample_info, geno):
         self._snp_info = snp_info
+        if pd.api.types.is_categorical_dtype(self._snp_info[RefPanel.A1COL]):
+            self._snp_info.loc[:, RefPanel.A1COL] = self._snp_info[RefPanel.A1COL].astype('str')
+            self._snp_info.loc[:, RefPanel.A2COL] = self._snp_info[RefPanel.A2COL].astype('str')
         self._sample_info = sample_info
         self._geno = geno
         return
@@ -39,43 +42,52 @@ class RefPanel(object):
     def filter_snps_by_chr(self, chr):
         return self._snp_info.loc[self._snp_info[RefPanel.CHRCOL] == chr]
 
-    def partitions_by_chr(self, window_size):
+    def get_partitions(self, window_size, chrom=None, start=None, stop=None):
         """
         Lazily iterate over location partitions
         """
-        for chrom in self.CHRs:
-            snps = self.filter_snps_by_chr(chrom)
-            min_pos = snps[RefPanel.BPCOL].min()
-            max_pos = snps[RefPanel.BPCOL].max()
+
+        if chrom is not None:
+            chrom = self.clean_chrom(chrom)
+
+        for chrm in self.CHRs:
+            if chrom is not None and chrom != chrm:
+                continue
+
+            snps = self.filter_snps_by_chr(chrm)
+            if start is not None:
+                min_pos = int(start)
+            else:
+                min_pos = snps[RefPanel.BPCOL].min()
+            if stop is not None:
+                max_pos = int(stop)
+            else:
+                max_pos = snps[RefPanel.BPCOL].max()
 
             nwin = int(np.ceil((max_pos - min_pos + 1) / window_size))
 
-            yield [chrom, min_pos, min(min_pos + window_size, max_pos)]
+            yield [chrm, min_pos, min(min_pos + window_size, max_pos)]
             last_stop = min_pos + window_size
 
             for i in range(1, nwin):
                 start = last_stop + 1
                 stop = min(start + window_size, max_pos)
-                yield [chrom, start, stop]
+                yield [chrm, start, stop]
                 last_stop = stop
 
         return
 
-    def subset_by_pos(self, chrom, start, stop):
+    def subset_by_pos(self, chrom, start=None, stop=None):
         df = self._snp_info
-        if pd.api.types.is_string_dtype(df[RefPanel.CHRCOL]) or pd.api.types.is_categorical_dtype(df[RefPanel.CHRCOL]):
-            chrom = str(chrom)
+        chrom = self.clean_chrom(chrom)
+        if start is not None and stop is not None:
+            snps = df.loc[(df[RefPanel.CHRCOL] == chrom) & (df[RefPanel.BPCOL] >= start) & (df[RefPanel.BPCOL] <= stop)]
+        elif start is not None and stop is None:
+            snps = df.loc[(df[RefPanel.CHRCOL] == chrom) & (df[RefPanel.BPCOL] >= start)]
+        elif start is None and stop is not None:
+            snps = df.loc[(df[RefPanel.CHRCOL] == chrom) & (df[RefPanel.BPCOL] <= stop)]
         else:
-            chrom = int(chrom)
-
-        if pd.api.types.is_string_dtype(df[RefPanel.BPCOL]):
-            start = str(start)
-            stop = str(stop)
-        else:
-            start = int(start)
-            stop = int(stop)
-
-        snps = df.loc[(df[RefPanel.CHRCOL] == chrom) & (df[RefPanel.BPCOL] >= start) & (df[RefPanel.BPCOL] <= stop)]
+            snps = df.loc[(df[RefPanel.CHRCOL] == chrom)]
 
         return RefPanel(snps, self._sample_info, self._geno)
 
@@ -115,6 +127,16 @@ class RefPanel(object):
 
         LD = np.corrcoef(G.T) + np.eye(p) * lmbda
         return LD
+
+    def clean_chrom(self, chrom):
+        df = self._snp_info
+        ret_val = None
+        if pd.api.types.is_string_dtype(df[RefPanel.CHRCOL]) or pd.api.types.is_categorical_dtype(df[RefPanel.CHRCOL]):
+            ret_val = str(chrom)
+        else:
+            ret_val = int(chrom)
+
+        return ret_val
 
     @classmethod
     def parse_plink(cls, path):
