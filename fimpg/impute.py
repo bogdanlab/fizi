@@ -46,8 +46,11 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
     log = logging.getLogger(fimpg.LOG)
     log.info("Starting imputation at region {}".format(ref))
 
+    # cut down on typing
     GWAS = fimpg.GWAS
+    RefPanel = fimpg.RefPanel
 
+    # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
     ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
 
@@ -60,7 +63,7 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
     # check for allele flips
     sset = merged_snps[obs_flag]
     obsZ = sset.Z.values
-    alleles = sset[GWAS.A1COL] + sset[GWAS.A2COL] + sset[fimpg.RefPanel.A1COL] + sset[fimpg.RefPanel.A2COL]
+    alleles = sset[GWAS.A1COL] + sset[GWAS.A2COL] + sset[RefPanel.A1COL] + sset[RefPanel.A2COL]
 
     # from LDSC...
     try:
@@ -93,13 +96,14 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
 
     # predict the Z-scores
     impZs = lin.multi_dot([unobsV.T, obsVinv, obsZ])
+
     # compute two-sided z-test for p-value
     pvals = stats.chi2.sf(impZs ** 2, 1)
 
     # compute r2-pred
     r2pred = np.diag(lin.multi_dot([unobsV.T, obsVinv, unobsV]))
 
-    # compute r2-pred adjusted for effective number of markers used for inference
+    # compute r2-pred adjusted for effective number of markers used in inference
     n_ref = ref.sample_size
 
     # compute effective size
@@ -120,23 +124,26 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
     # this needs to be cleaned up. at some point just switch to 'standard' columns
     results = dict()
     results[GWAS.CHRCOL] = [gwas[GWAS.CHRCOL].iloc[0]] * (nimp + nall)
-    results[GWAS.SNPCOL] = gwas[GWAS.SNPCOL].tolist() + imp_snps[fimpg.RefPanel.SNPCOL].tolist()
-    results[GWAS.BPCOL] = gwas[GWAS.BPCOL].tolist() + imp_snps[fimpg.RefPanel.BPCOL].tolist()
-    results[GWAS.A1COL] = gwas[GWAS.A1COL].tolist() + imp_snps[fimpg.RefPanel.A1COL].tolist()
-    results[GWAS.A2COL] = gwas[GWAS.A2COL].tolist() + imp_snps[fimpg.RefPanel.A2COL].tolist()
+    results[GWAS.SNPCOL] = gwas[GWAS.SNPCOL].tolist() + imp_snps[RefPanel.SNPCOL].tolist()
+    results[GWAS.BPCOL] = gwas[GWAS.BPCOL].tolist() + imp_snps[RefPanel.BPCOL].tolist()
+    results[GWAS.A1COL] = gwas[GWAS.A1COL].tolist() + imp_snps[RefPanel.A1COL].tolist()
+    results[GWAS.A2COL] = gwas[GWAS.A2COL].tolist() + imp_snps[RefPanel.A2COL].tolist()
     results[GWAS.TYPECOL] = (["gwas"] * nall) + (["imputed"] * nimp)
     results[GWAS.ZCOL] = gwas[GWAS.ZCOL].tolist() + list(impZs)
     results[GWAS.ADJR2COL] = ([1.0] * nall) + list(r2pred_adj)
     if GWAS.NCOL in gwas:
         neff = np.max(gwas[GWAS.NCOL]) * r2pred
         results[GWAS.NEFFCOL] = gwas[GWAS.NCOL].tolist() + list(neff)
-    else:
-        results[GWAS.NEFFCOL] = ["NA"] * (nall + nimp)
     results[GWAS.PCOL] = gwas[GWAS.PCOL].tolist() + list(pvals)
 
     df = pd.DataFrame(data=results)
-    df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
-             GWAS.NEFFCOL, GWAS.PCOL]]
+    if GWAS.NCOL in gwas:
+        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
+                GWAS.NEFFCOL, GWAS.PCOL]]
+    else:
+        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
+                GWAS.PCOL]]
+                
     df = df.sort_values(by=[GWAS.BPCOL])
     log.info("Completed imputation at region {}".format(ref))
 

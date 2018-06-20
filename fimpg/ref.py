@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import numpy.linalg as lin
 
@@ -35,40 +36,54 @@ class RefPanel(object):
         stop_bp = self._snp_info[RefPanel.BPCOL].iloc[-1]
         return "{}:{} - {}:{}".format(start_chr, int(start_bp), stop_chr, int(stop_bp))
 
-    @property
-    def CHRs(self):
-        return self._snp_info[RefPanel.CHRCOL].unique()
-
-    def filter_snps_by_chr(self, chr):
-        return self._snp_info.loc[self._snp_info[RefPanel.CHRCOL] == chr]
 
     def get_partitions(self, window_size, chrom=None, start=None, stop=None):
         """
         Lazily iterate over location partitions
         """
+        log = logging.getLogger(fimpg.LOG)
+
+        chroms = self._snp_info[RefPanel.CHRCOL].unique()
 
         if chrom is not None:
             chrom = self.clean_chrom(chrom)
+            if chrom not in chroms:
+                msg = "User supplied chromosome {} is not found in data".format(chrom)
+                log.error(msg)
+                return
 
-        for chrm in self.CHRs:
+        for chrm in chroms:
             if chrom is not None and chrom != chrm:
                 continue
 
-            snps = self.filter_snps_by_chr(chrm)
+            snps = self._snp_info.loc[self._snp_info[RefPanel.CHRCOL] == chrm]
+
+            min_pos_indata = snps[RefPanel.BPCOL].min()
             if start is not None:
                 min_pos = int(start)
+                if min_pos < min_pos_indata:
+                    msg = "User supplied start {} is less than min start found in data {}. Switching to data-version"
+                    msg = msg.format(min_pos, min_pos_indata)
+                    log.warning(msg)
+                    min_pos = min_pos_indata
             else:
-                min_pos = snps[RefPanel.BPCOL].min()
+                min_pos = min_pos_indata
+
+            max_pos_indata = snps[RefPanel.BPCOL].max()
             if stop is not None:
                 max_pos = int(stop)
+                if max_pos > max_pos_indata:
+                    msg = "User supplied stop {} is greater than max stop found in data {}. Switching to data-version"
+                    msg = msg.format(max_pos, max_pos_indata)
+                    log.warning(msg)
+                    max_pos = max_pos_indata
             else:
-                max_pos = snps[RefPanel.BPCOL].max()
+                max_pos = max_pos_indata
 
             nwin = int(np.ceil((max_pos - min_pos + 1) / window_size))
-
             yield [chrm, min_pos, min(min_pos + window_size, max_pos)]
-            last_stop = min_pos + window_size
 
+            last_stop = min_pos + window_size
             for i in range(1, nwin):
                 start = last_stop + 1
                 stop = min(start + window_size, max_pos)
@@ -111,10 +126,6 @@ class RefPanel(object):
     @property
     def sample_size(self):
         return len(self._sample_info)
-
-    @property
-    def effective_snp_size(self):
-        pass
 
     def estimate_LD(self, snps=None, lmbda=0.1):
         G = self.get_geno(snps)
