@@ -77,7 +77,8 @@ class RefPanel(object):
 
         return
 
-    def subset_by_pos(self, chrom, start=None, stop=None):
+    def subset_by_pos(self, chrom, start=None, stop=None, filter_ambig=True):
+        AMBIG = {"AT", "TA", "CG", "GC"}
         df = self._snp_info
         chrom = self.clean_chrom(chrom)
         if start is not None and stop is not None:
@@ -88,6 +89,11 @@ class RefPanel(object):
             snps = df.loc[(df[RefPanel.CHRCOL] == chrom) & (df[RefPanel.BPCOL] <= stop)]
         else:
             snps = df.loc[(df[RefPanel.CHRCOL] == chrom)]
+
+        if filter_ambig:
+            alleles = snps[RefPanel.A1COL] + snps[RefPanel.A2COL]
+            non_ambig = alleles.apply(lambda y: y.upper() not in AMBIG)
+            snps = snps[non_ambig]
 
         return RefPanel(snps, self._sample_info, self._geno)
 

@@ -158,8 +158,8 @@ def main(argsv):
 
         log.info("Starting summary statistics imputation")
         with open("{}.sumstat".format(args.output), "w") as output:
+            
             partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
-
             for idx, partition in enumerate(partitions):
                 chrom, start, stop = partition
                 part_ref = ref.subset_by_pos(chrom, start, stop)

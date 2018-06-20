@@ -42,14 +42,11 @@ FLIP_ALLELES = {''.join(x):
                 for x in MATCH_ALLELES}
 
 
-def effective_size(mat, eps=1e-6):
-    svals = svdvals(mat)
-    return np.sum(svals > eps)
-
-
 def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
     log = logging.getLogger(fimpg.LOG)
     log.info("Starting imputation at region {}".format(ref))
+
+    GWAS = fimpg.GWAS
 
     merged_snps = ref.overlap_gwas(gwas)
     ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
@@ -63,20 +60,20 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
     # check for allele flips
     sset = merged_snps[obs_flag]
     obsZ = sset.Z.values
-    alleles = sset[fimpg.GWAS.A1COL] + sset[fimpg.GWAS.A2COL] + sset[fimpg.RefPanel.A1COL] + sset[fimpg.RefPanel.A2COL]
+    alleles = sset[GWAS.A1COL] + sset[GWAS.A2COL] + sset[fimpg.RefPanel.A1COL] + sset[fimpg.RefPanel.A2COL]
 
     # from LDSC...
     try:
         obsZ *= (-1) ** alleles.apply(lambda y: FLIP_ALLELES[y])
     except KeyError as e:
         msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
-        msg += 'Did you forget to use --merge-alleles with munge_sumstats.py?'
+        msg += 'Did you forget to use --merge-alleles with LDScore munge_sumstats.py?'
         raise KeyError(msg)
 
     nobs = np.sum(obs)
     nimp = np.sum(to_impute)
     if nimp == 0:
-        log.info("Skipping region {}. All SNPs imputed".format(ref))
+        log.info("Skipping region {}. No SNPs require imputation".format(ref))
         return None
 
     # this needs tweaking... we need to check so there exist enough
@@ -122,25 +119,25 @@ def impute_gwas(gwas, ref, sigmas=None, prop=0.75, epsilon=1e-6):
 
     # this needs to be cleaned up. at some point just switch to 'standard' columns
     results = dict()
-    results[fimpg.GWAS.CHRCOL] = [gwas[fimpg.GWAS.CHRCOL].iloc[0]] * (nimp + nall)
-    results[fimpg.GWAS.SNPCOL] = gwas[fimpg.GWAS.SNPCOL].tolist() + imp_snps[fimpg.RefPanel.SNPCOL].tolist()
-    results[fimpg.GWAS.BPCOL] = gwas[fimpg.GWAS.BPCOL].tolist() + imp_snps[fimpg.RefPanel.BPCOL].tolist()
-    results[fimpg.GWAS.A1COL] = gwas[fimpg.GWAS.A1COL].tolist() + imp_snps[fimpg.RefPanel.A1COL].tolist()
-    results[fimpg.GWAS.A2COL] = gwas[fimpg.GWAS.A2COL].tolist() + imp_snps[fimpg.RefPanel.A2COL].tolist()
-    results[fimpg.GWAS.TYPECOL] = (["gwas"] * nall) + (["imputed"] * nimp)
-    results[fimpg.GWAS.ZCOL] = gwas[fimpg.GWAS.ZCOL].tolist() + list(impZs)
-    results[fimpg.GWAS.ADJR2COL] = ([1.0] * nall) + list(r2pred_adj)
-    if fimpg.GWAS.NCOL in gwas:
-        neff = np.max(gwas[fimpg.GWAS.NCOL]) * r2pred
-        results[fimpg.GWAS.NEFFCOL] = gwas[fimpg.GWAS.NCOL].tolist() + list(neff)
+    results[GWAS.CHRCOL] = [gwas[GWAS.CHRCOL].iloc[0]] * (nimp + nall)
+    results[GWAS.SNPCOL] = gwas[GWAS.SNPCOL].tolist() + imp_snps[fimpg.RefPanel.SNPCOL].tolist()
+    results[GWAS.BPCOL] = gwas[GWAS.BPCOL].tolist() + imp_snps[fimpg.RefPanel.BPCOL].tolist()
+    results[GWAS.A1COL] = gwas[GWAS.A1COL].tolist() + imp_snps[fimpg.RefPanel.A1COL].tolist()
+    results[GWAS.A2COL] = gwas[GWAS.A2COL].tolist() + imp_snps[fimpg.RefPanel.A2COL].tolist()
+    results[GWAS.TYPECOL] = (["gwas"] * nall) + (["imputed"] * nimp)
+    results[GWAS.ZCOL] = gwas[GWAS.ZCOL].tolist() + list(impZs)
+    results[GWAS.ADJR2COL] = ([1.0] * nall) + list(r2pred_adj)
+    if GWAS.NCOL in gwas:
+        neff = np.max(gwas[GWAS.NCOL]) * r2pred
+        results[GWAS.NEFFCOL] = gwas[GWAS.NCOL].tolist() + list(neff)
     else:
-        results[fimpg.GWAS.NEFFCOL] = ["NA"] * (nall + nimp)
-    results[fimpg.GWAS.PCOL] = gwas[fimpg.GWAS.PCOL].tolist() + list(pvals)
+        results[GWAS.NEFFCOL] = ["NA"] * (nall + nimp)
+    results[GWAS.PCOL] = gwas[GWAS.PCOL].tolist() + list(pvals)
 
     df = pd.DataFrame(data=results)
-    df = df[[fimpg.GWAS.CHRCOL, fimpg.GWAS.SNPCOL, fimpg.GWAS.BPCOL, fimpg.GWAS.A1COL, fimpg.GWAS.A2COL,
-             fimpg.GWAS.TYPECOL, fimpg.GWAS.ZCOL, fimpg.GWAS.ADJR2COL, fimpg.GWAS.NEFFCOL, fimpg.GWAS.PCOL]]
-    df = df.sort_values(by=[fimpg.GWAS.BPCOL])
+    df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
+             GWAS.NEFFCOL, GWAS.PCOL]]
+    df = df.sort_values(by=[GWAS.BPCOL])
     log.info("Completed imputation at region {}".format(ref))
 
     return df
