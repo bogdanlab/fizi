@@ -60,13 +60,17 @@ def main(argsv):
         help="GWAS summary data.")
     argp.add_argument("ref",
         help="Path to reference panel PLINK data.")
+    argp.add_argument("--annot",
+        help="Annotation data.", type=ap.FileType("r"))
+    argp.add_argument("--sigmas", 
+        help="LD-score enrichments.", type=ap.FileType("r"))
 
     # imputation location options
-    argp.add_argument("--chr",
+    argp.add_argument("--chr", 
         help="Perform imputation for specific chromosome.")
-    argp.add_argument("--start",
+    argp.add_argument("--start", 
         help="Perform imputation starting at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
-    argp.add_argument("--stop",
+    argp.add_argument("--stop", 
         help="Perform imputation until at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
 
     # imputation options
@@ -76,8 +80,7 @@ def main(argsv):
     # misc options
     argp.add_argument("--quiet", default=False, action="store_true",
         help="Do not print anything to stdout.")
-    argp.add_argument("-o", "--output", default="FIMPG",
-        help="Prefix for output data.")
+    argp.add_argument("-o", "--output", default="FIMPG", help="Prefix for output data.")
 
     args = argp.parse_args(argsv)
 
@@ -153,8 +156,12 @@ def main(argsv):
         log.info("Preparing reference SNP data")
         ref = fimpg.RefPanel.parse_plink(args.ref)
 
-        # load functional annotations
-        # TBD
+        # load functional annotations and sigmas
+        if args.annot is not None and args.sigmas is not None:
+            log.info("Preparing annotation file")
+            annot = fimpg.Annot.parse_annot(args.annot)
+            log.info("Preparing LD-score file")
+            sigmas = fimpg.Sigmas.parse_sigmas(args.sigmas)
 
         log.info("Starting summary statistics imputation")
         with open("{}.sumstat".format(args.output), "w") as output:
@@ -173,8 +180,17 @@ def main(argsv):
                     log.warning("No GWAS SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
                     continue
 
+                if args.annot is not None and args.sigmas is not None:
+                    part_annot = annot.subset_by_pos(chrom, start, stop)
+                    if len(part_annot) == 0:
+                        log.warning("No annotations found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
+                        continue
+
                 # impute GWAS data for this partition
-                imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref)
+                if args.annot is not None and args.sigmas is not None:
+                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, part_annot, sigmas)
+                else:
+                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref)
                 if imputed_gwas is not None:
                     fimpg.write_output(imputed_gwas, output, append=bool(idx))
 
