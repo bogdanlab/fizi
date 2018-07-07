@@ -93,7 +93,7 @@ class RefPanel(object):
         return
 
     def subset_by_pos(self, chrom, start=None, stop=None, filter_ambig=True):
-        AMBIG = {"AT", "TA", "CG", "GC"}
+        AMBIG = ["AT", "TA", "CG", "GC"]
         df = self._snp_info
         chrom = self.clean_chrom(chrom)
         if start is not None and stop is not None:
@@ -115,13 +115,14 @@ class RefPanel(object):
     def overlap_gwas(self, gwas):
         df = self._snp_info
         merged_snps = pd.merge(gwas, df, how="outer", left_on=fimpg.GWAS.SNPCOL, right_on=fimpg.RefPanel.SNPCOL)
+        merged_snps.drop_duplicates(subset=fimpg.RefPanel.SNPCOL, inplace=True)
         return merged_snps
 
     def get_geno(self, snps=None):
         if snps is None:
             return self._geno.compute().T
         else:
-            return self._geno[snps.i.values, :].compute().T
+            return self._geno[snps.i.values,:].compute().T
 
     @property
     def sample_size(self):
@@ -129,7 +130,6 @@ class RefPanel(object):
 
     def estimate_LD(self, snps=None, lmbda=0.1):
         G = self.get_geno(snps)
-
         n, p = G.shape
         col_mean = np.nanmean(G, axis=0)
 
