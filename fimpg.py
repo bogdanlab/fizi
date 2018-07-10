@@ -158,7 +158,8 @@ def main(argsv):
 
         log.info("Starting summary statistics imputation")
         with open("{}.sumstat".format(args.output), "w") as output:
-            
+
+            import pdb; pdb.set_trace()
             partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
             for idx, partition in enumerate(partitions):
                 chrom, start, stop = partition

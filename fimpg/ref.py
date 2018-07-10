@@ -59,21 +59,23 @@ class RefPanel(object):
             snps = self._snp_info.loc[self._snp_info[RefPanel.CHRCOL] == chrm]
 
             min_pos_indata = snps[RefPanel.BPCOL].min()
+            max_pos_indata = snps[RefPanel.BPCOL].max()
+
+            # check against user arguments
             if start is not None:
                 min_pos = int(start)
-                if min_pos < min_pos_indata:
-                    msg = "User supplied start {} is less than min start found in data {}. Switching to data-version"
+                if min_pos < min_pos_indata and min_pos < max_pos_indata:
+                    msg = "User supplied start {} is less than min start found in data {}. Switching to data start"
                     msg = msg.format(min_pos, min_pos_indata)
                     log.warning(msg)
                     min_pos = min_pos_indata
             else:
                 min_pos = min_pos_indata
 
-            max_pos_indata = snps[RefPanel.BPCOL].max()
             if stop is not None:
                 max_pos = int(stop)
-                if max_pos > max_pos_indata:
-                    msg = "User supplied stop {} is greater than max stop found in data {}. Switching to data-version"
+                if max_pos > max_pos_indata and max_pos > min_pos_indata:
+                    msg = "User supplied stop {} is greater than max stop found in data {}. Switching to data stop"
                     msg = msg.format(max_pos, max_pos_indata)
                     log.warning(msg)
                     max_pos = max_pos_indata
