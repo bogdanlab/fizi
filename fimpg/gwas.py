@@ -69,8 +69,9 @@ class GWAS(pd.DataFrame):
 
     @classmethod
     def parse_gwas(cls, stream):
-        dtype_dict = {'SNP': str,   'Z': float, 'N': float, 'A1': str, 'A2': str}
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True)
+        dtype_dict = {'SNP': str, 'Z': float, 'N': float, 'A1': str, 'A2': str}
+        cmp = fimpg.get_compression(stream)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmp)
         for column in GWAS.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in summary statistics".format(column))

@@ -3,6 +3,7 @@ import scipy.stats as stats
 
 import fimpg
 
+
 class Sigmas(pd.DataFrame):
     """
     Thin wrapper for a pandas DataFrame object containing LDSC partitions.
@@ -11,7 +12,7 @@ class Sigmas(pd.DataFrame):
     NAMECOL = "Category"
     SIGMACOL = "Coefficient"
     SIGMASECOL = "Coefficient_std_error"
-    SIGMAZCOL = "Coefficient_z-score" 
+    SIGMAZCOL = "Coefficient_z-score"
 
     REQ_COLS = [NAMECOL, SIGMACOL, SIGMASECOL, SIGMAZCOL]
 
@@ -26,7 +27,8 @@ class Sigmas(pd.DataFrame):
     @classmethod
     def parse_sigmas(cls, stream):
         dtype_dict = {'Category': str}
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True)
+        cmp = fimpg.get_compression(stream)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmp)
         for column in Sigmas.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in partition file".format(column))

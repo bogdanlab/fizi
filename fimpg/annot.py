@@ -3,6 +3,7 @@ import scipy.stats as stats
 
 import fimpg
 
+
 class Annot(pd.DataFrame):
     """
     Thin wrapper for a pandas DataFrame object containing annotation data.
@@ -43,7 +44,8 @@ class Annot(pd.DataFrame):
     @classmethod
     def parse_annot(cls, stream):
         dtype_dict = {'SNP': str, 'BP': int, 'CHR': int}
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression='gzip')
+        cmp = fimpg.get_compression(stream)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmp)
         for column in Annot.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in annotation file".format(column))

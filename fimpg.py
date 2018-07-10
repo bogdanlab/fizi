@@ -17,8 +17,8 @@ def parse_pos(pos, option):
     match = re.match("^(([0-9]*[.])?[0-9]+)(mb|kb)?$", pos, flags=re.IGNORECASE)
     position = None
     if match:
-        pos_tmp = float(match.group(1)) # position
-        pos_mod = match.group(3) # modifier
+        pos_tmp = float(match.group(1))  # position
+        pos_mod = match.group(3)  # modifier
         if pos_mod:
             pos_mod = pos_mod.upper()
             if pos_mod == "MB":
@@ -57,20 +57,22 @@ def main(argsv):
 
     # main arguments
     argp.add_argument("gwas", type=ap.FileType("r"),
-        help="GWAS summary data.")
+        help="GWAS summary data. Supports gzip and bz2 compression.")
     argp.add_argument("ref",
         help="Path to reference panel PLINK data.")
-    argp.add_argument("--annot",
-        help="Annotation data.", type=ap.FileType("r"))
-    argp.add_argument("--sigmas", 
-        help="LD-score enrichments.", type=ap.FileType("r"))
+
+    # functional arguments
+    argp.add_argument("--annot", default=None, type=ap.FileType("r"),
+        help="SNP functional annotation data. Should be similar format to LDScore. Supports gzip and bz2 compression.")
+    argp.add_argument("--sigmas", default=None, type=ap.FileType("r"),
+        help="Output of LDScore regression. Must contain coefficient estimates. Supports gzip and bz2 compression.")
 
     # imputation location options
-    argp.add_argument("--chr", 
+    argp.add_argument("--chr",
         help="Perform imputation for specific chromosome.")
-    argp.add_argument("--start", 
+    argp.add_argument("--start",
         help="Perform imputation starting at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
-    argp.add_argument("--stop", 
+    argp.add_argument("--stop",
         help="Perform imputation until at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
 
     # imputation options
@@ -78,7 +80,7 @@ def main(argsv):
         help="Size of imputation window (in base pairs). Accepts kb/mb modifiers.")
 
     # misc options
-    argp.add_argument("--quiet", default=False, action="store_true",
+    argp.add_argument("-q", "--quiet", default=False, action="store_true",
         help="Do not print anything to stdout.")
     argp.add_argument("-o", "--output", default="FIMPG", help="Prefix for output data.")
 
@@ -166,25 +168,28 @@ def main(argsv):
         log.info("Starting summary statistics imputation")
         with open("{}.sumstat".format(args.output), "w") as output:
 
-            import pdb; pdb.set_trace()
             partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
             for idx, partition in enumerate(partitions):
                 chrom, start, stop = partition
-                part_ref = ref.subset_by_pos(chrom, start, stop)
-
-                if len(part_ref) == 0:
-                    log.warning("No reference SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
-                    continue
-
                 part_gwas = gwas.subset_by_pos(chrom, start, stop)
                 if len(part_gwas) == 0:
                     log.warning("No GWAS SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
                     continue
 
+                part_ref = ref.subset_by_pos(chrom, start, stop)
+                if len(part_ref) == 0:
+                    log.warning("No reference SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
+                    imputed_gwas = fimpg.create_output(part_gwas)
+                    fimpg.write_output(imputed_gwas, output, append=bool(idx))
+                    continue
+
+                # should we just fall back to IMPG when no annotations overlap?
                 if args.annot is not None and args.sigmas is not None:
                     part_annot = annot.subset_by_pos(chrom, start, stop)
                     if len(part_annot) == 0:
                         log.warning("No annotations found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
+                        imputed_gwas = fimpg.create_output(part_gwas)
+                        fimpg.write_output(imputed_gwas, output, append=bool(idx))
                         continue
 
                 # impute GWAS data for this partition
@@ -192,8 +197,8 @@ def main(argsv):
                     imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, part_annot, sigmas)
                 else:
                     imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref)
-                if imputed_gwas is not None:
-                    fimpg.write_output(imputed_gwas, output, append=bool(idx))
+
+                fimpg.write_output(imputed_gwas, output, append=bool(idx))
 
     except Exception as err:
         log.error(err.message)

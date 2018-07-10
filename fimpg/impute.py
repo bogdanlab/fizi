@@ -10,7 +10,7 @@ import scipy.stats as stats
 from scipy.linalg import svdvals
 
 
-__all__ = ['impute_gwas']
+__all__ = ['create_output', 'impute_gwas']
 
 
 # Base-handling code is from LDSC...
@@ -26,7 +26,6 @@ STRAND_AMBIGUOUS = dict((key, value) for (key, value) in elements)
 # SNPS we want to keep (pairs of alleles)
 VALID_SNPS = [x for x in map(lambda y: ''.join(y), it.product(BASES, BASES))
               if x[0] != x[1] and not STRAND_AMBIGUOUS[x]]
-#VALID_SNPS = dict((x[0], x[1]) for x in elements)
 # T iff SNP 1 has the same alleles as SNP 2 (allowing for strand or ref allele flip).
 MATCH_ALLELES = [x for x in map(lambda y: ''.join(y), it.product(VALID_SNPS, VALID_SNPS))
                  # strand and ref match
@@ -36,14 +35,60 @@ MATCH_ALLELES = [x for x in map(lambda y: ''.join(y), it.product(VALID_SNPS, VAL
                  # ref flip, strand match
                  ((x[0] == x[3]) and (x[1] == x[2])) or
                  ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]]))]  # strand and ref flip
-#MATCH_ALLELES = dict((x[0], x[1]) for x in elements)
 # T iff SNP 1 has the same alleles as SNP 2 w/ ref allele flip.
 FLIP_ALLELES = [(''.join(x),
                 ((x[0] == x[3]) and (x[1] == x[2])) or  # strand match
                 # strand flip
                 ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]])))
                 for x in MATCH_ALLELES]
-FLIP_ALLELES = dict((key, value) for (key,value) in elements)
+FLIP_ALLELES = dict((key, value) for (key, value) in elements)
+
+
+def create_output(obs_snps, imp_snps=None, r2pred_adj=None):
+    GWAS = fimpg.GWAS
+
+    nall = len(obs_snps)
+    nimp = len(imp_snps) if imp_snps is not None else 0
+
+    # this needs to be cleaned up. at some point just switch to 'standard' columns
+    results = dict()
+    if impg_snps is not None:
+        results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]] * (nimp + nall)
+        results[GWAS.SNPCOL] = obs_snps[GWAS.SNPCOL].tolist() + imp_snps[RefPanel.SNPCOL].tolist()
+        results[GWAS.BPCOL] = obs_snps[GWAS.BPCOL].tolist() + imp_snps[RefPanel.BPCOL].tolist()
+        results[GWAS.A1COL] = obs_snps[GWAS.A1COL].tolist() + imp_snps[RefPanel.A1COL].tolist()
+        results[GWAS.A2COL] = obs_snps[GWAS.A2COL].tolist() + imp_snps[RefPanel.A2COL].tolist()
+        results[GWAS.TYPECOL] = (["gwas"] * nall) + (["imputed"] * nimp)
+        results[GWAS.ZCOL] = obs_snps[GWAS.ZCOL].tolist() + list(impZs)
+        results[GWAS.ADJR2COL] = ([1.0] * nall) + list(r2pred_adj)
+        if GWAS.NCOL in obs_snps:
+            neff = np.max(obs_snps[GWAS.NCOL]) * r2pred_adj
+            results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist() + list(neff)
+        results[GWAS.PCOL] = obs_snps[GWAS.PCOL].tolist() + list(pvals)
+    else:
+        results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]]
+        results[GWAS.SNPCOL] = obs_snps[GWAS.SNPCOL].tolist()
+        results[GWAS.BPCOL] = obs_snps[GWAS.BPCOL].tolist()
+        results[GWAS.A1COL] = obs_snps[GWAS.A1COL].tolist()
+        results[GWAS.A2COL] = obs_snps[GWAS.A2COL].tolist()
+        results[GWAS.TYPECOL] = (["gwas"] * nall)
+        results[GWAS.ZCOL] = obs_snps[GWAS.ZCOL].tolist()
+        results[GWAS.ADJR2COL] = ([1.0] * nall)
+        if GWAS.NCOL in obs_snps:
+            results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist()
+        results[GWAS.PCOL] = obs_snps[GWAS.PCOL].tolist()
+
+    df = pd.DataFrame(data=results)
+
+    if GWAS.NCOL in obs_snps:
+        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
+                GWAS.NEFFCOL, GWAS.PCOL]]
+    else:
+        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
+                GWAS.PCOL]]
+
+    return df.sort_values(by=[GWAS.BPCOL])
+
 
 def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     log = logging.getLogger(fimpg.LOG)
@@ -60,12 +105,15 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
 
     ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
     n = gwas.iloc[0][GWAS.NCOL]
- 
+
     # compute linkage-disequilibrium estimate
     LD = ref.estimate_LD(ref_snps)
     obs_flag = ~pd.isna(ref_snps.Z)
     to_impute = (~obs_flag).values
     obs = obs_flag.values
+
+    obs_snps = ref_snps[obs]
+    imp_snps = ref_snps[to_impute]
 
     # check for allele flips
     sset = ref_snps[obs_flag]
@@ -73,13 +121,13 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     alleles = sset[GWAS.A1COL] + sset[GWAS.A2COL] + sset[RefPanel.A1COL] + sset[RefPanel.A2COL]
 
     if annot is not None and sigmas is not None:
-        
+
         # filter out annotations with low tau Z-scores
         sigmas = sigmas.loc[(sigmas[Sigmas.NAMECOL]=="baseL2_0") | (sigmas[Sigmas.SIGMAZCOL].astype(float) < -2.0) | (sigmas[Sigmas.SIGMAZCOL].astype(float) > 2.0)]
-        
+
         sigma_values = sigmas[Sigmas.SIGMACOL]
         annot_names = sigmas[Sigmas.NAMECOL].values.flatten()
-        
+
         # remove "L2_0" from annot names in sigmas file so they match with names in annotation file
         for a in range(len(annot_names)):
             if annot_names[a][len(annot_names[a])-4:len(annot_names[a])] == "L2_0":
@@ -92,22 +140,21 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
         # merge annotations with merged reference snps
         merged_annot = pd.merge(ref_snps, annot, how="outer", left_on=GWAS.SNPCOL, right_on=fimpg.Annot.SNPCOL)
         merged_annot.drop_duplicates(subset=fimpg.RefPanel.SNPCOL)
-        
+
         for i in range(m):
             col_info = merged_annot[annot_names]
-            annot_info = col_info.iloc[i,:].values.flatten()
-            
+            annot_info = col_info.iloc[i, :].values.flatten()
+
             # if annotations are not available for this SNP
             if np.isnan(annot_info[0]):
-                annot_data = np.zeros(shape=(1,len(annot_names)))
+                annot_data = np.zeros(shape=(1, len(annot_names)))
                 annot_data[0,0] = 1
-            
+
             # if annotations are available
             else:
                 annot_data = annot_info
-            
-            D[i,i] = np.dot(annot_data, np.multiply(sigma_values,n))
 
+            D[i, i] = np.dot(annot_data, np.multiply(sigma_values,n))
 
     # from LDSC...
     try:
@@ -121,14 +168,14 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     nimp = np.sum(to_impute)
     if nimp == 0:
         log.info("Skipping region {}. No SNPs require imputation".format(ref))
-        return None
+        return fimpg.create_output(obs_snps)
 
     # this needs tweaking... we need to check so there exist enough
     # snps for imputation per user spec
-    mprop = nobs / float(nobs+nimp)
+    mprop = nobs / float(nobs + nimp)
     if mprop < prop:
         log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
-        return None
+        return fimpg.create_output(obs_snps)
 
     Voo_ld = LD[obs].T[obs].T
     Vuo_ld = LD[to_impute].T[obs].T
@@ -152,8 +199,9 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     pvals = stats.chi2.sf(impZs ** 2, 1)
 
     # compute r2-pred
-
+    # TODO: might be faster to just unroll the loop and process diagonal only
     r2pred = np.diag(lin.multi_dot([unobsV, obsVinv, unobsV.T]))
+
     # compute r2-pred adjusted for effective number of markers used in inference
     n_ref = ref.sample_size
 
@@ -167,37 +215,7 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     r2adj = np.vectorize(_r2adj)
     r2pred_adj = r2adj(r2pred)
 
-    obs_snps = ref_snps[obs]
-    imp_snps = ref_snps[to_impute]
-
-    nall = len(obs_snps)
-
-    # this needs to be cleaned up. at some point just switch to 'standard' columns
-    results = dict()
-    results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]] * (nimp + nall)
-    results[GWAS.SNPCOL] = obs_snps[GWAS.SNPCOL].tolist() + imp_snps[RefPanel.SNPCOL].tolist()
-    results[GWAS.BPCOL] = obs_snps[GWAS.BPCOL].tolist() + imp_snps[RefPanel.BPCOL].tolist()
-    results[GWAS.A1COL] = obs_snps[GWAS.A1COL].tolist() + imp_snps[RefPanel.A1COL].tolist()
-    results[GWAS.A2COL] = obs_snps[GWAS.A2COL].tolist() + imp_snps[RefPanel.A2COL].tolist()
-    results[GWAS.TYPECOL] = (["gwas"] * nall) + (["imputed"] * nimp)
-    results[GWAS.ZCOL] = obs_snps[GWAS.ZCOL].tolist() + list(impZs)
-    results[GWAS.ADJR2COL] = ([1.0] * nall) + list(r2pred_adj)
-    if GWAS.NCOL in obs_snps:
-        neff = np.max(obs_snps[GWAS.NCOL]) * r2pred
-        results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist() + list(neff)
-    results[GWAS.PCOL] = obs_snps[GWAS.PCOL].tolist() + list(pvals)
-
-    df = pd.DataFrame(data=results)
-    if GWAS.NCOL in obs_snps:
-        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
-                GWAS.NEFFCOL, GWAS.PCOL]]
-    else:
-        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
-                GWAS.PCOL]]
-                
-    #df = df.sort_values(by=[GWAS.BPCOL])
+    df = fimpg.create_output(obs_snps, imp_snps, r2pred_adj)
     log.info("Completed imputation at region {}".format(ref))
-
-    df = df.sort_values(by=[GWAS.BPCOL])
 
     return df

@@ -14,7 +14,7 @@ class RefPanel(object):
     A1COL = "a1"
     A2COL = "a0"
 
-    #chrom         snp   cm       pos a0 a1    i
+    # chrom snp  cm pos a0 a1 i
 
     def __init__(self, snp_info, sample_info, geno):
         self._snp_info = snp_info
@@ -35,7 +35,6 @@ class RefPanel(object):
         start_bp = self._snp_info[RefPanel.BPCOL].iloc[0]
         stop_bp = self._snp_info[RefPanel.BPCOL].iloc[-1]
         return "{}:{} - {}:{}".format(start_chr, int(start_bp), stop_chr, int(stop_bp))
-
 
     def get_partitions(self, window_size, chrom=None, start=None, stop=None):
         """
@@ -124,7 +123,7 @@ class RefPanel(object):
         if snps is None:
             return self._geno.compute().T
         else:
-            return self._geno[snps.i.values,:].compute().T
+            return self._geno[snps.i.values, :].compute().T
 
     @property
     def sample_size(self):
@@ -134,11 +133,6 @@ class RefPanel(object):
         G = self.get_geno(snps)
         n, p = G.shape
         col_mean = np.nanmean(G, axis=0)
-
-        # unlikely, but drop SNPs that are completely missing
-        #inds = np.where(!np.isnan(col_mean))
-        #G = G.T[inds].T
-        #col_mean = col_mean[inds]
 
         # impute missing with column mean
         inds = np.where(np.isnan(G))
