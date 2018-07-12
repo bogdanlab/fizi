@@ -4,6 +4,16 @@ import scipy.stats as stats
 import fimpg
 
 
+class AnnotSeries(pd.Series):
+    @property
+    def _constructor(self):
+        return fimpg.AnnotSeries
+
+    @property
+    def _constructor_expanddim(self):
+        return fimpg.Annot
+
+
 class Annot(pd.DataFrame):
     """
     Thin wrapper for a pandas DataFrame object containing annotation data.
@@ -13,6 +23,7 @@ class Annot(pd.DataFrame):
     CHRCOL = "CHR"
     SNPCOL = "SNP"
     BPCOL = "BP"
+    CMCOL = "CM"
 
     REQ_COLS = [CHRCOL, SNPCOL, BPCOL]
 
@@ -23,6 +34,10 @@ class Annot(pd.DataFrame):
     @property
     def _constructor(self):
         return fimpg.Annot
+
+    @property
+    def _constructor_sliced(self):
+        return fimpg.AnnotSeries
 
     def subset_by_pos(self, chrom, start, stop):
         if pd.api.types.is_string_dtype(self[Annot.CHRCOL]) or pd.api.types.is_categorical_dtype(self[Annot.CHRCOL]):
@@ -43,7 +58,7 @@ class Annot(pd.DataFrame):
 
     @classmethod
     def parse_annot(cls, stream):
-        dtype_dict = {'SNP': str, 'BP': int, 'CHR': int}
+        dtype_dict = {'SNP': str, 'BP': int}
         cmp = fimpg.get_compression(stream)
         df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmp)
         for column in Annot.REQ_COLS:

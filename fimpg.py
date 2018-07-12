@@ -1,4 +1,9 @@
 #! /usr/bin/env python
+
+#import sys
+#idx = sys.path.index('/u/local/apps/python/2.7.3/lib/python2.7/site-packages/python_dateutil-2.2-py2.7.egg')
+#del sys.path[idx]
+
 import argparse as ap
 import logging
 import os
@@ -53,7 +58,8 @@ def get_command_string(args):
 
 
 def main(argsv):
-    argp = ap.ArgumentParser(description="GWAS summary statistics imputation with functional data.")
+    argp = ap.ArgumentParser(description="GWAS summary statistics imputation with functional data.",
+        formatter_class=ap.ArgumentDefaultsHelpFormatter)
 
     # main arguments
     argp.add_argument("gwas", type=ap.FileType("r"),
@@ -63,16 +69,22 @@ def main(argsv):
 
     # functional arguments
     argp.add_argument("--annot", default=None, type=ap.FileType("r"),
-        help="SNP functional annotation data. Should be similar format to LDScore. Supports gzip and bz2 compression.")
+        help="Path to SNP functional annotation data. Should be in LDScore regression-style format. Supports gzip and bz2 compression.")
     argp.add_argument("--sigmas", default=None, type=ap.FileType("r"),
         help="Output of LDScore regression. Must contain coefficient estimates. Supports gzip and bz2 compression.")
+    argp.add_argument("--alpha", default=1.00, type=float,
+        help="Significance threshold to determine which functional categories to keep.")
+
+    # GWAS options
+    argp.add_argument("--gwas-n", default=None, type=int,
+        help="GWAS sample size.")
 
     # imputation location options
-    argp.add_argument("--chr",
+    argp.add_argument("--chr", default=None,
         help="Perform imputation for specific chromosome.")
-    argp.add_argument("--start",
+    argp.add_argument("--start", default=None,
         help="Perform imputation starting at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
-    argp.add_argument("--stop",
+    argp.add_argument("--stop", default=None,
         help="Perform imputation until at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
 
     # imputation options
@@ -82,7 +94,9 @@ def main(argsv):
     # misc options
     argp.add_argument("-q", "--quiet", default=False, action="store_true",
         help="Do not print anything to stdout.")
-    argp.add_argument("-o", "--output", default="FIMPG", help="Prefix for output data.")
+    argp.add_argument("-o", "--output", default="FIMPG",
+        help="Prefix for output data.")
+
 
     args = argp.parse_args(argsv)
 
@@ -164,6 +178,14 @@ def main(argsv):
             annot = fimpg.Annot.parse_annot(args.annot)
             log.info("Preparing LD-score file")
             sigmas = fimpg.Sigmas.parse_sigmas(args.sigmas)
+            sigmas = sigmas.subset_by_pvalue(args.alpha)
+
+            # we should check columns in sigmas are contained in annot here...
+            sig_cnames = sigmas[fimpg.Sigmas.NAMECOL]
+            annot_cnames = annot.columns.values
+            for cn in sig_cnames:
+                if cn not in annot_cnames:
+                    raise KeyError("Prior variance for {} not found in annotation file".format(cn))
 
         log.info("Starting summary statistics imputation")
         with open("{}.sumstat".format(args.output), "w") as output:
@@ -194,7 +216,7 @@ def main(argsv):
 
                 # impute GWAS data for this partition
                 if args.annot is not None and args.sigmas is not None:
-                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, part_annot, sigmas)
+                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, annot=part_annot, sigmas=sigmas)
                 else:
                     imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref)
 

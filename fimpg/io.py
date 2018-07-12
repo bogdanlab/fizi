@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 
 __all__ = ["get_compression", "write_output"]
@@ -7,9 +8,16 @@ def get_compression(fh):
     # This function from LDSC regression
     # (c) 2014 Brendan Bulik-Sullivan and Hilary Finucane
     '''Which sort of compression should we use with read_csv?'''
-    if fh.endswith('gz'):
+    if type(fh) is file:
+        _, ext = os.path.splitext(fh.name)
+    elif type(fh) is str:
+        _, ext = os.path.splitext(fh)
+    else:
+        raise ValueError("get_compression: argument must be file handle or path")
+
+    if ext.endswith('gz'):
         compression = 'gzip'
-    elif fh.endswith('bz2'):
+    elif ext.endswith('bz2'):
         compression = 'bz2'
     else:
         compression = None

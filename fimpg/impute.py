@@ -19,40 +19,40 @@ COMPLEMENT = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
 # bases
 BASES = COMPLEMENT.keys()
 # true iff strand ambiguous
-elements = [(''.join(x), x[0] == COMPLEMENT[x[1]])
+STRAND_AMBIGUOUS = {''.join(x): x[0] == COMPLEMENT[x[1]]
                     for x in it.product(BASES, BASES)
-                    if x[0] != x[1]]
-STRAND_AMBIGUOUS = dict((key, value) for (key, value) in elements)
+                    if x[0] != x[1]}
 # SNPS we want to keep (pairs of alleles)
-VALID_SNPS = [x for x in map(lambda y: ''.join(y), it.product(BASES, BASES))
-              if x[0] != x[1] and not STRAND_AMBIGUOUS[x]]
+VALID_SNPS = {x for x in map(lambda y: ''.join(y), it.product(BASES, BASES))
+              if x[0] != x[1] and not STRAND_AMBIGUOUS[x]}
 # T iff SNP 1 has the same alleles as SNP 2 (allowing for strand or ref allele flip).
-MATCH_ALLELES = [x for x in map(lambda y: ''.join(y), it.product(VALID_SNPS, VALID_SNPS))
+MATCH_ALLELES = {x for x in map(lambda y: ''.join(y), it.product(VALID_SNPS, VALID_SNPS))
                  # strand and ref match
                  if ((x[0] == x[2]) and (x[1] == x[3])) or
                  # ref match, strand flip
                  ((x[0] == COMPLEMENT[x[2]]) and (x[1] == COMPLEMENT[x[3]])) or
                  # ref flip, strand match
                  ((x[0] == x[3]) and (x[1] == x[2])) or
-                 ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]]))]  # strand and ref flip
+                 ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]]))}  # strand and ref flip
 # T iff SNP 1 has the same alleles as SNP 2 w/ ref allele flip.
-FLIP_ALLELES = [(''.join(x),
+FLIP_ALLELES = {''.join(x):
                 ((x[0] == x[3]) and (x[1] == x[2])) or  # strand match
                 # strand flip
-                ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]])))
-                for x in MATCH_ALLELES]
-FLIP_ALLELES = dict((key, value) for (key, value) in elements)
+                ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]]))
+                for x in MATCH_ALLELES}
 
 
-def create_output(obs_snps, imp_snps=None, r2pred_adj=None):
+def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=None, pvals=None):
+
     GWAS = fimpg.GWAS
+    RefPanel = fimpg.RefPanel
 
     nall = len(obs_snps)
     nimp = len(imp_snps) if imp_snps is not None else 0
 
     # this needs to be cleaned up. at some point just switch to 'standard' columns
     results = dict()
-    if impg_snps is not None:
+    if imp_snps is not None:
         results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]] * (nimp + nall)
         results[GWAS.SNPCOL] = obs_snps[GWAS.SNPCOL].tolist() + imp_snps[RefPanel.SNPCOL].tolist()
         results[GWAS.BPCOL] = obs_snps[GWAS.BPCOL].tolist() + imp_snps[RefPanel.BPCOL].tolist()
@@ -64,6 +64,9 @@ def create_output(obs_snps, imp_snps=None, r2pred_adj=None):
         if GWAS.NCOL in obs_snps:
             neff = np.max(obs_snps[GWAS.NCOL]) * r2pred_adj
             results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist() + list(neff)
+        elif gwas_n is not None:
+            neff = gwas_n * r2pred_adj
+            results[GWAS.NEFFCOL] = ([gwas_n] * nall) + list(neff)
         results[GWAS.PCOL] = obs_snps[GWAS.PCOL].tolist() + list(pvals)
     else:
         results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]]
@@ -76,21 +79,26 @@ def create_output(obs_snps, imp_snps=None, r2pred_adj=None):
         results[GWAS.ADJR2COL] = ([1.0] * nall)
         if GWAS.NCOL in obs_snps:
             results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist()
+        elif gwas_n is not None:
+            results[GWAS.NEFFCOL] = [gwas_n] * nall
+
         results[GWAS.PCOL] = obs_snps[GWAS.PCOL].tolist()
 
     df = pd.DataFrame(data=results)
 
-    if GWAS.NCOL in obs_snps:
+    if GWAS.NCOL in obs_snps or gwas_n is not None:
         df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
                 GWAS.NEFFCOL, GWAS.PCOL]]
     else:
         df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
                 GWAS.PCOL]]
 
+    df[GWAS.BPCOL] = df[GWAS.BPCOL].astype(int)
+
     return df.sort_values(by=[GWAS.BPCOL])
 
 
-def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
+def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     log = logging.getLogger(fimpg.LOG)
     log.info("Starting imputation at region {}".format(ref))
 
@@ -104,10 +112,30 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     merged_snps = ref.overlap_gwas(gwas)
 
     ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
-    n = gwas.iloc[0][GWAS.NCOL]
+
+    if annot is not None and sigmas is not None:
+
+        # merge annotations with merged reference snps
+        ref_snps = pd.merge(ref_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=fimpg.Annot.SNPCOL)
+
+        # this assumes all sigmas columns are in the annotations
+        # we should perform a sanity check when the program launches...
+        sigma_values = sigmas[Sigmas.SIGMACOL]
+        annot_names = sigmas[Sigmas.NAMECOL].values.flatten()
+        A = ref_snps[annot_names].values
+
+        # this assumes intercept is first...
+        # fine for now but we should fix this...
+        A.T[0] = 1
+        A[np.isnan(A)] = 0
+
+        if gwas_n is None and GWAS.NCOL in gwas:
+            gwas_n = np.mean(gwas[GWAS.NCOL])
+
+        D = np.diag(gwas_n * np.dot(A, sigma_values))
 
     # compute linkage-disequilibrium estimate
-    LD = ref.estimate_LD(ref_snps)
+    LD = ref.estimate_LD(ref_snps, adjust=0.01)
     obs_flag = ~pd.isna(ref_snps.Z)
     to_impute = (~obs_flag).values
     obs = obs_flag.values
@@ -119,42 +147,6 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     sset = ref_snps[obs_flag]
     obsZ = sset.Z.values
     alleles = sset[GWAS.A1COL] + sset[GWAS.A2COL] + sset[RefPanel.A1COL] + sset[RefPanel.A2COL]
-
-    if annot is not None and sigmas is not None:
-
-        # filter out annotations with low tau Z-scores
-        sigmas = sigmas.loc[(sigmas[Sigmas.NAMECOL]=="baseL2_0") | (sigmas[Sigmas.SIGMAZCOL].astype(float) < -2.0) | (sigmas[Sigmas.SIGMAZCOL].astype(float) > 2.0)]
-
-        sigma_values = sigmas[Sigmas.SIGMACOL]
-        annot_names = sigmas[Sigmas.NAMECOL].values.flatten()
-
-        # remove "L2_0" from annot names in sigmas file so they match with names in annotation file
-        for a in range(len(annot_names)):
-            if annot_names[a][len(annot_names[a])-4:len(annot_names[a])] == "L2_0":
-                annot_names[a] = annot_names[a][0:len(annot_names[a])-4]
-        annot_names = annot_names.tolist()
-
-        m = len(obs)
-        D = np.zeros(shape=(m, m))
-
-        # merge annotations with merged reference snps
-        merged_annot = pd.merge(ref_snps, annot, how="outer", left_on=GWAS.SNPCOL, right_on=fimpg.Annot.SNPCOL)
-        merged_annot.drop_duplicates(subset=fimpg.RefPanel.SNPCOL)
-
-        for i in range(m):
-            col_info = merged_annot[annot_names]
-            annot_info = col_info.iloc[i, :].values.flatten()
-
-            # if annotations are not available for this SNP
-            if np.isnan(annot_info[0]):
-                annot_data = np.zeros(shape=(1, len(annot_names)))
-                annot_data[0,0] = 1
-
-            # if annotations are available
-            else:
-                annot_data = annot_info
-
-            D[i, i] = np.dot(annot_data, np.multiply(sigma_values,n))
 
     # from LDSC...
     try:
@@ -168,18 +160,18 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     nimp = np.sum(to_impute)
     if nimp == 0:
         log.info("Skipping region {}. No SNPs require imputation".format(ref))
-        return fimpg.create_output(obs_snps)
+        return fimpg.create_output(gwas)
 
     # this needs tweaking... we need to check so there exist enough
     # snps for imputation per user spec
     mprop = nobs / float(nobs + nimp)
     if mprop < prop:
         log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
-        return fimpg.create_output(obs_snps)
+        return fimpg.create_output(gwas)
 
     Voo_ld = LD[obs].T[obs].T
     Vuo_ld = LD[to_impute].T[obs].T
-    Vou_ld = LD[obs].T[to_impute].T
+    Vou_ld = Vuo_ld.T
     Vuu_ld = LD[to_impute].T[to_impute].T
     if sigmas is not None and annot is not None:
         Do = D.T[obs].T[obs]
@@ -215,7 +207,7 @@ def impute_gwas(gwas, ref, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
     r2adj = np.vectorize(_r2adj)
     r2pred_adj = r2adj(r2pred)
 
-    df = fimpg.create_output(obs_snps, imp_snps, r2pred_adj)
+    df = fimpg.create_output(gwas, imp_snps, gwas_n, impZs, r2pred_adj, pvals)
     log.info("Completed imputation at region {}".format(ref))
 
     return df

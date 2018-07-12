@@ -129,7 +129,7 @@ class RefPanel(object):
     def sample_size(self):
         return len(self._sample_info)
 
-    def estimate_LD(self, snps=None, lmbda=0.1):
+    def estimate_LD(self, snps=None, adjust=0.1):
         G = self.get_geno(snps)
         n, p = G.shape
         col_mean = np.nanmean(G, axis=0)
@@ -138,7 +138,7 @@ class RefPanel(object):
         inds = np.where(np.isnan(G))
         G[inds] = np.take(col_mean, inds[1])
 
-        LD = np.corrcoef(G.T) + np.eye(p) * lmbda
+        LD = np.corrcoef(G.T) + np.eye(p) * adjust
         return LD
 
     def clean_chrom(self, chrom):
