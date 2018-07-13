@@ -176,29 +176,36 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsil
     if sigmas is not None and annot is not None:
         Do = D.T[obs].T[obs]
         Du = D.T[to_impute].T[to_impute]
-        unobsV = Vuo_ld + lin.multi_dot([Vuu_ld, Du, Vuo_ld]) + lin.multi_dot([Vuo_ld, Do, Voo_ld])
-        obsV = Voo_ld + lin.multi_dot([Voo_ld, Do, Voo_ld]) + lin.multi_dot([Vou_ld, Du, Vuo_ld])
+        uoV = Vuo_ld + lin.multi_dot([Vuu_ld, Du, Vuo_ld]) + lin.multi_dot([Vuo_ld, Do, Voo_ld])
+        ooV = Voo_ld + lin.multi_dot([Voo_ld, Do, Voo_ld]) + lin.multi_dot([Vou_ld, Du, Vuo_ld])
+        uuV = Vuu_ld + lin.multi_dot([Vuu_ld, Du, Vuu_ld]) + lin.multi_dot([Vuo_ld, Do, Vou_ld])
     else:
-        obsV = Voo_ld
-        unobsV = Vuo_ld
+        uoV = Vuo_ld
+        ooV = Voo_ld
+        uuV = Vuu_ld
 
-    obsVinv = lin.pinv(obsV)
+    ooVinv = lin.pinv(ooV)
 
     # predict the Z-scores
-    impZs = lin.multi_dot([unobsV, obsVinv, obsZ])
+    impZs = lin.multi_dot([uoV, ooVinv, obsZ])
 
     # compute two-sided z-test for p-value
     pvals = stats.chi2.sf(impZs ** 2, 1)
 
-    # compute r2-pred
-    # TODO: might be faster to just unroll the loop and process diagonal only
-    r2pred = np.diag(lin.multi_dot([unobsV, obsVinv, unobsV.T]))
+    # compute marginal r2-pred scores
+    # we re-scale by the marginal prior to account for inflation due to prior info 
+    # and adjustment to LD diagonal
+    # this ensures that r2pred will always be between 0-1
+    # has the benefit of being marginal posterior variance / prior variance for the fimpg model
+    # which is a measure of information gained over prior
+    # 1 - diag(post_var) / diag(prior_var) = diag(r2pred) / diag(prior_var)
+    r2pred = np.diag(lin.multi_dot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
 
     # compute r2-pred adjusted for effective number of markers used in inference
     n_ref = ref.sample_size
 
     # compute effective size
-    svals = svdvals(obsV)
+    svals = svdvals(ooV)
     p_eff = np.sum(svals > epsilon)
 
     def _r2adj(r2p):
