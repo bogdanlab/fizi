@@ -8,9 +8,9 @@ def get_compression(fh):
     # This function from LDSC regression
     # (c) 2014 Brendan Bulik-Sullivan and Hilary Finucane
     '''Which sort of compression should we use with read_csv?'''
-    if type(fh) is file:
+    if isinstance(fh, file):
         _, ext = os.path.splitext(fh.name)
-    elif type(fh) is str:
+    elif isinstance(fh, str):
         _, ext = os.path.splitext(fh)
     else:
         raise ValueError("get_compression: argument must be file handle or path")

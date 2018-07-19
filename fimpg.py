@@ -38,6 +38,39 @@ def parse_pos(pos, option):
     return position
 
 
+def parse_locations(locations, chrom=None, start_bp=None, stop_bp=None):
+    """
+    Parse user-specified BED file with [CHR, START, STOP] windows defining where to perform
+    imputation.
+
+    If user also specified chr, start-bp, or stop-bp arguments filter on those as well.
+    """
+    for idx, line in enumerate(locations):
+        # skip comments
+        if "#" in line:
+            continue
+
+        row = line.split()
+
+        if len(row) < 3:
+            raise ValueError("Line {} in locations file does not contain [CHR, START, STOP]".format(idx))
+
+        chrom_arg = row[0]
+        start_arg = parse_pos(row[1], "start argument in locations file")
+        stop_arg = parse_pos(row[2], "stop argument in locations file")
+
+        if chrom is not None and chrom_arg != chrom:
+            continue
+        elif start_bp is not None and start_arg < start_bp:
+            continue
+        elif stop_bp is not None and stop_arg > stop_bp:
+            continue
+
+        yield [chrom_arg, start_arg, stop_arg]
+
+    return
+
+
 def get_command_string(args):
     """
     Format fimpg call and options into a string for logging/printing
@@ -71,7 +104,7 @@ def main(argsv):
     argp.add_argument("--annot", default=None, type=ap.FileType("r"),
         help="Path to SNP functional annotation data. Should be in LDScore regression-style format. Supports gzip and bz2 compression.")
     argp.add_argument("--sigmas", default=None, type=ap.FileType("r"),
-        help="Output of LDScore regression. Must contain coefficient estimates. Supports gzip and bz2 compression.")
+        help="Path to LDScore regression output. Must contain coefficient estimates. Supports gzip and bz2 compression.")
     argp.add_argument("--alpha", default=1.00, type=float,
         help="Significance threshold to determine which functional categories to keep.")
 
@@ -86,10 +119,16 @@ def main(argsv):
         help="Perform imputation starting at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
     argp.add_argument("--stop", default=None,
         help="Perform imputation until at specific location (in base pairs). Accepts kb/mb modifiers. Requires --chr to be specified.")
+    argp.add_argument("--locations", default=None, type=ap.FileType("r"),
+        help="Path to a BED file containing windows (e.g., CHR START STOP) to impute. Start and stop values may contain kb/mb modifiers.")
 
     # imputation options
     argp.add_argument("--window-size", default="250kb",
         help="Size of imputation window (in base pairs). Accepts kb/mb modifiers.")
+    argp.add_argument("--buffer-size", default="250kb",
+        help="Size of buffer window (in base pairs). Accepts kb/mb modifiers.")
+    argp.add_argument("--min-prop", default=0.5, type=float,
+        help="Minimum required proportion of gwas/reference panel overlap to perform imputation.")
 
     # misc options
     argp.add_argument("-q", "--quiet", default=False, action="store_true",
@@ -163,6 +202,11 @@ def main(argsv):
                     raise ValueError("Specified --start position must be before --stop position")
 
         window_size = parse_pos(args.window_size, "--window-size")
+        buffer_size = parse_pos(args.buffer_size, "--buffer-size")
+
+        min_prop = args.min_prop
+        if min_prop <= 0 or min_prop >= 1:
+            raise ValueError("--min-prop must be strictly bounded in (0, 1)")
 
         # load GWAS summary data
         log.info("Preparing GWAS summary file")
@@ -187,21 +231,28 @@ def main(argsv):
                 if cn not in annot_cnames:
                     raise KeyError("Prior variance for {} not found in annotation file".format(cn))
 
-        log.info("Starting summary statistics imputation")
+        log.info("Starting summary statistics imputation with window size {} and buffer size {}".format(window_size, buffer_size))
         with open("{}.sumstat".format(args.output), "w") as output:
 
-            partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
+            if args.locations is not None:
+                partitions = parse_locations(args.locations, chrom, start_bp, stop_bp)
+            else:
+                partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
+
             for idx, partition in enumerate(partitions):
                 chrom, start, stop = partition
-                part_gwas = gwas.subset_by_pos(chrom, start, stop)
+                pstart = max(1, start - buffer_size)
+                pstop = stop + buffer_size
+
+                part_gwas = gwas.subset_by_pos(chrom, pstart, pstop)
                 if len(part_gwas) == 0:
-                    log.warning("No GWAS SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
+                    log.warning("No GWAS SNPs found at {}:{} - {}. Skipping".format(chrom, int(pstart), int(pstop)))
                     continue
 
-                part_ref = ref.subset_by_pos(chrom, start, stop)
+                part_ref = ref.subset_by_pos(chrom, pstart, pstop)
                 if len(part_ref) == 0:
-                    log.warning("No reference SNPs found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
-                    imputed_gwas = fimpg.create_output(part_gwas)
+                    log.warning("No reference SNPs found at {}:{} - {}. Skipping".format(chrom, int(pstart), int(pstop)))
+                    imputed_gwas = fimpg.create_output(part_gwas, start=start, stop=stop)
                     fimpg.write_output(imputed_gwas, output, append=bool(idx))
                     continue
 
@@ -209,16 +260,18 @@ def main(argsv):
                 if args.annot is not None and args.sigmas is not None:
                     part_annot = annot.subset_by_pos(chrom, start, stop)
                     if len(part_annot) == 0:
-                        log.warning("No annotations found at {}:{} - {}. Skipping".format(chrom, int(start), int(stop)))
-                        imputed_gwas = fimpg.create_output(part_gwas)
+                        log.warning("No annotations found at {}:{} - {}. Skipping".format(chrom, int(pstart), int(pstop)))
+                        imputed_gwas = fimpg.create_output(part_gwas, start=start, stop=stop)
                         fimpg.write_output(imputed_gwas, output, append=bool(idx))
                         continue
 
                 # impute GWAS data for this partition
                 if args.annot is not None and args.sigmas is not None:
-                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, annot=part_annot, sigmas=sigmas)
+                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, annot=part_annot, sigmas=sigmas,
+                                                    prop=min_prop, start=start, stop=stop)
                 else:
-                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref)
+                    imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref,
+                                                    prop=min_prop, start=start, stop=stop)
 
                 fimpg.write_output(imputed_gwas, output, append=bool(idx))
 

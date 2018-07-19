@@ -42,7 +42,7 @@ FLIP_ALLELES = {''.join(x):
                 for x in MATCH_ALLELES}
 
 
-def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=None, pvals=None):
+def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=None, pvals=None, start=None, stop=None):
 
     GWAS = fimpg.GWAS
     RefPanel = fimpg.RefPanel
@@ -69,7 +69,7 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=N
             results[GWAS.NEFFCOL] = ([gwas_n] * nall) + list(neff)
         results[GWAS.PCOL] = obs_snps[GWAS.PCOL].tolist() + list(pvals)
     else:
-        results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]]
+        results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]] * nall
         results[GWAS.SNPCOL] = obs_snps[GWAS.SNPCOL].tolist()
         results[GWAS.BPCOL] = obs_snps[GWAS.BPCOL].tolist()
         results[GWAS.A1COL] = obs_snps[GWAS.A1COL].tolist()
@@ -94,11 +94,19 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=N
                 GWAS.PCOL]]
 
     df[GWAS.BPCOL] = df[GWAS.BPCOL].astype(int)
+    df = df.sort_values(by=[GWAS.BPCOL])
 
-    return df.sort_values(by=[GWAS.BPCOL])
+    if start is not None and stop is not None:
+        df = df.loc[(df[GWAS.BPCOL] >= start) & (df[GWAS.BPCOL] <= stop)]
+    elif start is not None:
+        df = df.loc[(df[GWAS.BPCOL] >= start)]
+    elif stop is not None:
+        df = df.loc[(df[GWAS.BPCOL] <= stop)]
+
+    return df
 
 
-def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsilon=1e-6):
+def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, stop=None, prop=0.4, epsilon=1e-6):
     log = logging.getLogger(fimpg.LOG)
     log.info("Starting imputation at region {}".format(ref))
 
@@ -110,11 +118,9 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsil
 
     # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
-
     ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
 
     if annot is not None and sigmas is not None:
-
         # merge annotations with merged reference snps
         ref_snps = pd.merge(ref_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=fimpg.Annot.SNPCOL)
 
@@ -135,10 +141,21 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsil
         D = np.diag(gwas_n * np.dot(A, sigma_values))
 
     # compute linkage-disequilibrium estimate
-    LD = ref.estimate_LD(ref_snps, adjust=0.01)
+    LD = ref.estimate_LD(ref_snps, adjust=0.1)
     obs_flag = ~pd.isna(ref_snps.Z)
     to_impute = (~obs_flag).values
     obs = obs_flag.values
+
+    nobs = np.sum(obs)
+    nimp = np.sum(to_impute)
+    if nimp == 0:
+        log.info("Skipping region {}. No SNPs require imputation".format(ref))
+        return fimpg.create_output(gwas, start=start, stop=stop)
+
+    mprop = nobs / float(nobs + nimp)
+    if mprop < prop:
+        log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
+        return fimpg.create_output(gwas, start=start, stop=stop)
 
     obs_snps = ref_snps[obs]
     imp_snps = ref_snps[to_impute]
@@ -150,24 +167,12 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsil
 
     # from LDSC...
     try:
-        obsZ *= (-1) ** alleles.apply(lambda y: FLIP_ALLELES[y])
+        flip_flags = alleles.apply(lambda y: FLIP_ALLELES[y])
+        obsZ *= (-1) ** flip_flags
     except KeyError as e:
         msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
         msg += 'Did you forget to use --merge-alleles with LDScore munge_sumstats.py?'
         raise KeyError(msg)
-
-    nobs = np.sum(obs)
-    nimp = np.sum(to_impute)
-    if nimp == 0:
-        log.info("Skipping region {}. No SNPs require imputation".format(ref))
-        return fimpg.create_output(gwas)
-
-    # this needs tweaking... we need to check so there exist enough
-    # snps for imputation per user spec
-    mprop = nobs / float(nobs + nimp)
-    if mprop < prop:
-        log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
-        return fimpg.create_output(gwas)
 
     Voo_ld = LD[obs].T[obs].T
     Vuo_ld = LD[to_impute].T[obs].T
@@ -193,7 +198,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsil
     pvals = stats.chi2.sf(impZs ** 2, 1)
 
     # compute marginal r2-pred scores
-    # we re-scale by the marginal prior to account for inflation due to prior info 
+    # we re-scale by the marginal prior to account for inflation due to prior info
     # and adjustment to LD diagonal
     # this ensures that r2pred will always be between 0-1
     # has the benefit of being marginal posterior variance / prior variance for the fimpg model
@@ -214,7 +219,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, prop=0.4, epsil
     r2adj = np.vectorize(_r2adj)
     r2pred_adj = r2adj(r2pred)
 
-    df = fimpg.create_output(gwas, imp_snps, gwas_n, impZs, r2pred_adj, pvals)
+    df = fimpg.create_output(gwas, imp_snps, gwas_n, impZs, r2pred_adj, pvals, start, stop)
     log.info("Completed imputation at region {}".format(ref))
 
     return df
