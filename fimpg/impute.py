@@ -106,7 +106,7 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=N
     return df
 
 
-def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, stop=None, prop=0.4, epsilon=1e-6):
+def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, stop=None, prop=0.4, ridge=0.1, epsilon=1e-6):
     log = logging.getLogger(fimpg.LOG)
     log.info("Starting imputation at region {}".format(ref))
 
@@ -141,7 +141,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         D = np.diag(gwas_n * np.dot(A, sigma_values))
 
     # compute linkage-disequilibrium estimate
-    LD = ref.estimate_LD(ref_snps, adjust=0.1)
+    LD = ref.estimate_LD(ref_snps, adjust=ridge)
     obs_flag = ~pd.isna(ref_snps.Z)
     to_impute = (~obs_flag).values
     obs = obs_flag.values

@@ -129,6 +129,8 @@ def main(argsv):
         help="Size of buffer window (in base pairs). Accepts kb/mb modifiers.")
     argp.add_argument("--min-prop", default=0.5, type=float,
         help="Minimum required proportion of gwas/reference panel overlap to perform imputation.")
+    argp.add_argument("--ridge-term", default=0.1, type=float,
+        help="Diagonal adjustment for linkage-disequilibrium (LD) estimate.")
 
     # misc options
     argp.add_argument("-q", "--quiet", default=False, action="store_true",
@@ -231,6 +233,12 @@ def main(argsv):
                 if cn not in annot_cnames:
                     raise KeyError("Prior variance for {} not found in annotation file".format(cn))
 
+        # parity check for functional data
+        if args.annot is not None and args.sigmas is None:
+            raise ValueError("Annotation requires corresponding LDSC escimates (--sigmas) file")
+        if args.annot is None and args.sigmas is not None:
+            raise ValueError("LDSC estimates requires corresponding annotation (--annot) file")
+
         log.info("Starting summary statistics imputation with window size {} and buffer size {}".format(window_size, buffer_size))
         with open("{}.sumstat".format(args.output), "w") as output:
 
@@ -268,10 +276,10 @@ def main(argsv):
                 # impute GWAS data for this partition
                 if args.annot is not None and args.sigmas is not None:
                     imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, annot=part_annot, sigmas=sigmas,
-                                                    prop=min_prop, start=start, stop=stop)
+                                                    prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
                 else:
                     imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref,
-                                                    prop=min_prop, start=start, stop=stop)
+                                                    prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
 
                 fimpg.write_output(imputed_gwas, output, append=bool(idx))
 
