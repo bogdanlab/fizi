@@ -136,7 +136,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         A[np.isnan(A)] = 0
 
         if gwas_n is None and GWAS.NCOL in gwas:
-            gwas_n = np.mean(gwas[GWAS.NCOL])
+            gwas_n = np.median(gwas[GWAS.NCOL])
 
         D = np.diag(gwas_n * np.dot(A, sigma_values))
 
