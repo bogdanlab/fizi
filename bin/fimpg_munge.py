@@ -113,8 +113,8 @@ describe_cname = {
     'BP': 'Base position',
     'SNP': 'Variant ID (e.g., rs number)',
     'P': 'p-Value',
-    'A1': 'Allele 1, interpreted as ref allele for signed sumstat.',
-    'A2': 'Allele 2, interpreted as non-ref allele for signed sumstat.',
+    'A1': 'Allele 1, interpreted as ref allele for signed sumstat',
+    'A2': 'Allele 2, interpreted as non-ref allele for signed sumstat',
     'N': 'Sample size',
     'N_CAS': 'Number of cases',
     'N_CON': 'Number of controls',
@@ -124,8 +124,8 @@ describe_cname = {
     'LOG_ODDS': 'Log odds ratio (0 --> no effect; above 0 --> A1 is risk increasing)',
     'INFO': 'INFO score (imputation quality; higher --> better imputation)',
     'FRQ': 'Allele frequency',
-    'SIGNED_SUMSTAT': 'Directional summary statistic as specified by --signed-sumstats.',
-    'NSTUDY': 'Number of studies in which the SNP was genotyped.'
+    'SIGNED_SUMSTAT': 'Directional summary statistic as specified by --signed-sumstats',
+    'NSTUDY': 'Number of studies in which the SNP was genotyped'
 }
 
 numeric_cols = ['P', 'N', 'N_CAS', 'N_CON', 'Z', 'OR', 'BETA', 'LOG_ODDS', 'INFO', 'FRQ', 'SIGNED_SUMSTAT', 'NSTUDY']
@@ -135,8 +135,8 @@ def get_command_string(args):
     """
     Format fimpg call and options into a string for logging/printing
     """
-    base = "fimpg.py " + " ".join(args[:2]) + os.linesep
-    rest = args[2:]
+    base = "fimpg_munge.py " +  os.linesep
+    rest = args
     rest_strs = []
     for cmd in rest:
         if "--" in cmd:
@@ -267,7 +267,7 @@ def parse_dat(dat_gen, convert_colname, merge_alleles, log, args):
     drops = {'NA': 0, 'P': 0, 'INFO': 0,
              'FRQ': 0, 'A': 0, 'SNP': 0, 'MERGE': 0}
     for block_num, dat in enumerate(dat_gen):
-        sys.stdout.write('.')
+        log.info('Reading SNP chunk {}'.format(block_num + 1))
         tot_snps += len(dat)
         old = len(dat)
         dat = dat.dropna(axis=0, how="any", subset=filter(
@@ -328,7 +328,7 @@ def parse_dat(dat_gen, convert_colname, merge_alleles, log, args):
 
         dat_list.append(dat[ii].reset_index(drop=True))
 
-    sys.stdout.write(' done\n')
+    log.info('Done reading SNP chunks')
     dat = pd.concat(dat_list, axis=0).reset_index(drop=True)
     log.info('Read {N} SNPs from --sumstats file'.format(N=tot_snps))
     if args.merge_alleles:
@@ -684,7 +684,7 @@ def main(argsv):
 
         log.info('Interpreting column names as follows:')
         for x in cname_description:
-            log.info(x + ':\t' + cname_description[x])
+            log.info(x + ': ' + cname_description[x])
 
         if args.merge_alleles:
             log.info(
@@ -733,7 +733,7 @@ def main(argsv):
                 msg = 'Median value of {F} is {V} (should be close to {M}). This column may be mislabeled.'
                 raise ValueError(msg.format(F=sign_cname, M=signed_sumstat_null, V=round(m, 2)))
             else:
-                msg = 'Median value of {F} was {C}, which seems sensible.'.format(C=m, F=name)
+                msg = 'Median value of {F} was {C}, which seems sensible.'.format(C=m, F=sign_cname)
                 log.info(msg)
 
             dat.Z *= (-1) ** (dat.SIGNED_SUMSTAT < signed_sumstat_null)
@@ -744,14 +744,14 @@ def main(argsv):
         if args.merge_alleles:
             dat = allele_merge(dat, merge_alleles, log)
 
-        out_fname = args.out + '.sumstats.gz'
+        out_fname = args.output + '.sumstats.gz'
         print_colnames = [
             c for c in dat.columns if c in ['CHR', 'BP', 'SNP', 'N', 'Z', 'A1', 'A2']]
         if args.keep_maf and 'FRQ' in dat.columns:
             print_colnames.append('FRQ')
         msg = 'Writing summary statistics for {M} SNPs ({N} with nonmissing beta) to {F}.'
         log.info(
-            msg.format(M=len(dat), F=out_fname + '.gz', N=dat.N.notnull().sum()))
+            msg.format(M=len(dat), F=out_fname, N=dat.N.notnull().sum()))
 
         dat.to_csv(out_fname, sep="\t", index=False, columns=print_colnames, float_format='%.3f', compression="gzip")
 

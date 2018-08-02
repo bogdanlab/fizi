@@ -75,7 +75,7 @@ def get_command_string(args):
     """
     Format fimpg call and options into a string for logging/printing
     """
-    base = "fimpg.py " + " ".join(args[:2]) + os.linesep
+    base = "fimpg_impute.py " + " ".join(args[:2]) + os.linesep
     rest = args[2:]
     rest_strs = []
     for cmd in rest:

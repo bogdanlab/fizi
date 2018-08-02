@@ -10,7 +10,7 @@ import scipy.stats as stats
 from scipy.linalg import svdvals
 
 
-__all__ = ['create_output', 'impute_gwas']
+__all__ = ['create_output', 'impute_gwas', 'VALID_SNPS', 'MATCH_ALLELES']
 
 
 # Base-handling code is from LDSC...
@@ -25,6 +25,7 @@ STRAND_AMBIGUOUS = {''.join(x): x[0] == COMPLEMENT[x[1]]
 # SNPS we want to keep (pairs of alleles)
 VALID_SNPS = {x for x in map(lambda y: ''.join(y), it.product(BASES, BASES))
               if x[0] != x[1] and not STRAND_AMBIGUOUS[x]}
+
 # T iff SNP 1 has the same alleles as SNP 2 (allowing for strand or ref allele flip).
 MATCH_ALLELES = {x for x in map(lambda y: ''.join(y), it.product(VALID_SNPS, VALID_SNPS))
                  # strand and ref match
