@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+# This is a modified munge_sumstat.py from LDSC project
+# FIMPG needed a similar tool but with a few extra output columns
+# Credit to Brendan Bulik-Sullivan and Hilary Finucane
+
 from __future__ import division
 import argparse
 import bz2
@@ -17,7 +21,6 @@ from scipy.stats import chi2
 np.seterr(invalid='ignore')
 
 null_values = {
-
     'LOG_ODDS': 0,
     'BETA': 0,
     'OR': 1,
