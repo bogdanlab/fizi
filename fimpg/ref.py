@@ -122,8 +122,8 @@ class RefPanel(object):
         return merged_snps
 
     def get_geno(self, snps=None):
-        with np.warnings.catch_warnings():
-            np.warnings.filterwarnings('ignore', 'FutureWarning')
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore" category=FutureWarning)
             if snps is None:
                 return self._geno.compute().T
             else:
