@@ -123,7 +123,7 @@ class RefPanel(object):
 
     def get_geno(self, snps=None):
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore" category=FutureWarning)
+            warnings.simplefilter("ignore", category=FutureWarning)
             if snps is None:
                 return self._geno.compute().T
             else:
