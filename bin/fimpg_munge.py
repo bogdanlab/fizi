@@ -552,6 +552,14 @@ def main(argsv):
         log.setLevel(logging.INFO)
         fmt = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
 
+        # write to stdout unless quiet is set
+        sys.stdout.write(masthead)
+        sys.stdout.write(cmd_str)
+        sys.stdout.write("Starting log..." + os.linesep)
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setFormatter(fmt)
+        log.addHandler(stdout_handler)
+
         # setup log file, but write PLINK-style command first
         disk_log_stream = open("{}.log".format(args.output), "w")
         disk_log_stream.write(masthead)
@@ -561,14 +569,6 @@ def main(argsv):
         disk_handler = logging.StreamHandler(disk_log_stream)
         disk_handler.setFormatter(fmt)
         log.addHandler(disk_handler)
-
-        # write to stdout unless quiet is set
-        sys.stdout.write(masthead)
-        sys.stdout.write(cmd_str)
-        sys.stdout.write("Starting log..." + os.linesep)
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setFormatter(fmt)
-        log.addHandler(stdout_handler)
 
         if args.sumstats is None:
             raise ValueError('The --sumstats flag is required')

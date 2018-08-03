@@ -34,7 +34,7 @@ class GWAS(pd.DataFrame):
 
     NEFFCOL = "NEFF"
     TYPECOL = "TYPE"
-    ADJR2COL = "ADJ.R2.PRED"
+    R2COL = "R2.BLUP"
 
     REQ_COLS = [CHRCOL, SNPCOL, BPCOL, A1COL, A2COL, ZCOL]
 

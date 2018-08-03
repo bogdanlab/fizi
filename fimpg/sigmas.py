@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import scipy.stats as stats
 
 import fimpg
@@ -23,8 +24,9 @@ class Sigmas(pd.DataFrame):
     SIGMACOL = "Coefficient"
     SIGMASECOL = "Coefficient_std_error"
     SIGMAZCOL = "Coefficient_z-score"
+    ENRICHP = "Enrichment_p"
 
-    REQ_COLS = [NAMECOL, SIGMACOL, SIGMASECOL, SIGMAZCOL]
+    REQ_COLS = [NAMECOL, SIGMACOL, SIGMASECOL, SIGMAZCOL, ENRICHP]
 
     def __init__(self, *args, **kwargs):
         super(Sigmas, self).__init__(*args, **kwargs)
@@ -38,7 +40,7 @@ class Sigmas(pd.DataFrame):
     def _constructor_sliced(self):
         return fimpg.SigmasSeries
 
-    def subset_by_pvalue(self, pvalue, keep_baseline=True):
+    def subset_by_tau_pvalue(self, pvalue, keep_baseline=True):
         zscores = self[Sigmas.SIGMAZCOL].values
         pval_flag = 2 * stats.norm.sf(zscores) < pvalue
         if keep_baseline:
@@ -47,6 +49,24 @@ class Sigmas(pd.DataFrame):
             sigmas = self.loc[pval_flag]
 
         return Sigmas(sigmas)
+
+    def subset_by_enrich_pvalue(self, pvalue, keep_baseline=True):
+        pvalues = self[Sigmas.ENRICHP].values
+        pvalues[np.isnan(pvalues)] = 1.0
+        pval_flag = pvalues < pvalue
+        if keep_baseline:
+            sigmas = self.loc[(self[Sigmas.NAMECOL]=="base") | (pval_flag)]
+        else:
+            sigmas = self.loc[pval_flag]
+
+        return Sigmas(sigmas)
+
+    def set_nonnegative(self):
+        sigmas = self[Sigmas.SIGMACOL].values
+        sigmas[sigmas < 0] = 0
+        self[Sigmas.SIGMACOL] = sigmas
+
+        return
 
     @classmethod
     def parse_sigmas(cls, stream):

@@ -43,7 +43,7 @@ FLIP_ALLELES = {''.join(x):
                 for x in MATCH_ALLELES}
 
 
-def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=None, pvals=None, start=None, stop=None):
+def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None, pvals=None, start=None, stop=None):
 
     GWAS = fimpg.GWAS
     RefPanel = fimpg.RefPanel
@@ -61,12 +61,12 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=N
         results[GWAS.A2COL] = obs_snps[GWAS.A2COL].tolist() + imp_snps[RefPanel.A2COL].tolist()
         results[GWAS.TYPECOL] = (["gwas"] * nall) + (["imputed"] * nimp)
         results[GWAS.ZCOL] = obs_snps[GWAS.ZCOL].tolist() + list(impZs)
-        results[GWAS.ADJR2COL] = ([1.0] * nall) + list(r2pred_adj)
+        results[GWAS.R2COL] = ([1.0] * nall) + list(r2blup)
         if GWAS.NCOL in obs_snps:
-            neff = np.max(obs_snps[GWAS.NCOL]) * r2pred_adj
+            neff = np.max(obs_snps[GWAS.NCOL]) * r2blup
             results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist() + list(neff)
         elif gwas_n is not None:
-            neff = gwas_n * r2pred_adj
+            neff = gwas_n * r2blup
             results[GWAS.NEFFCOL] = ([gwas_n] * nall) + list(neff)
         results[GWAS.PCOL] = obs_snps[GWAS.PCOL].tolist() + list(pvals)
     else:
@@ -77,7 +77,7 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=N
         results[GWAS.A2COL] = obs_snps[GWAS.A2COL].tolist()
         results[GWAS.TYPECOL] = (["gwas"] * nall)
         results[GWAS.ZCOL] = obs_snps[GWAS.ZCOL].tolist()
-        results[GWAS.ADJR2COL] = ([1.0] * nall)
+        results[GWAS.R2COL] = ([1.0] * nall)
         if GWAS.NCOL in obs_snps:
             results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist()
         elif gwas_n is not None:
@@ -88,10 +88,10 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2pred_adj=N
     df = pd.DataFrame(data=results)
 
     if GWAS.NCOL in obs_snps or gwas_n is not None:
-        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
+        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.R2COL,
                 GWAS.NEFFCOL, GWAS.PCOL]]
     else:
-        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.ADJR2COL,
+        df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.R2COL,
                 GWAS.PCOL]]
 
     df[GWAS.BPCOL] = df[GWAS.BPCOL].astype(int)
@@ -139,7 +139,9 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         if gwas_n is None and GWAS.NCOL in gwas:
             gwas_n = np.median(gwas[GWAS.NCOL])
 
-        D = np.diag(gwas_n * np.dot(A, sigma_values))
+        d = gwas_n * np.dot(A, sigma_values)
+        d[d < 0] = 0
+        D = np.diag(d)
 
     # compute linkage-disequilibrium estimate
     LD = ref.estimate_LD(ref_snps, adjust=ridge)
@@ -201,26 +203,10 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
     # compute marginal r2-pred scores
     # we re-scale by the marginal prior to account for inflation due to prior info
     # and adjustment to LD diagonal
-    # this ensures that r2pred will always be between 0-1
-    # has the benefit of being marginal posterior variance / prior variance for the fimpg model
-    # which is a measure of information gained over prior
-    # 1 - diag(post_var) / diag(prior_var) = diag(r2pred) / diag(prior_var)
-    r2pred = np.diag(lin.multi_dot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
+    # this ensures that r2pred will always be between 0-1 (if D is PSD)
+    r2blup = np.diag(lin.multi_dot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
 
-    # compute r2-pred adjusted for effective number of markers used in inference
-    n_ref = ref.sample_size
-
-    # compute effective size
-    svals = svdvals(ooV)
-    p_eff = np.sum(svals > epsilon)
-
-    def _r2adj(r2p):
-        return max(1 - (1 - r2p) * ((n_ref - 1) / float(n_ref - p_eff - 1)), epsilon)
-
-    r2adj = np.vectorize(_r2adj)
-    r2pred_adj = r2adj(r2pred)
-
-    df = fimpg.create_output(gwas, imp_snps, gwas_n, impZs, r2pred_adj, pvals, start, stop)
+    df = fimpg.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
     log.info("Completed imputation at region {}".format(ref))
 
     return df

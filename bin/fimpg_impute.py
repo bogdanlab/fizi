@@ -80,7 +80,7 @@ def get_command_string(args):
     rest_strs = []
     for cmd in rest:
         if "--" in cmd:
-            if cmd == "--quiet":
+            if cmd in ["--quiet", "--force-non-negative"]:
                 rest_strs.append("\t{}".format(cmd) + os.linesep)
             else:
                 rest_strs.append("\t{}".format(cmd))
@@ -107,6 +107,8 @@ def main(argsv):
         help="Path to LDScore regression output. Must contain coefficient estimates. Supports gzip and bz2 compression.")
     argp.add_argument("--alpha", default=1.00, type=float,
         help="Significance threshold to determine which functional categories to keep.")
+    argp.add_argument("--force-non-negative", default=False, action="store_true",
+        help="Set negative variance parameters to zero.")
 
     # GWAS options
     argp.add_argument("--gwas-n", default=None, type=int,
@@ -156,16 +158,6 @@ def main(argsv):
         log.setLevel(logging.INFO)
         fmt = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
 
-        # setup log file, but write PLINK-style command first
-        disk_log_stream = open("{}.log".format(args.output), "w")
-        disk_log_stream.write(masthead)
-        disk_log_stream.write(cmd_str)
-        disk_log_stream.write("Starting log..." + os.linesep)
-
-        disk_handler = logging.StreamHandler(disk_log_stream)
-        disk_handler.setFormatter(fmt)
-        log.addHandler(disk_handler)
-
         # write to stdout unless quiet is set
         if not args.quiet:
             # setup log file, but write PLINK-style command first
@@ -175,6 +167,16 @@ def main(argsv):
             stdout_handler = logging.StreamHandler(sys.stdout)
             stdout_handler.setFormatter(fmt)
             log.addHandler(stdout_handler)
+
+        # setup log file, but write PLINK-style command first
+        disk_log_stream = open("{}.log".format(args.output), "w")
+        disk_log_stream.write(masthead)
+        disk_log_stream.write(cmd_str)
+        disk_log_stream.write("Starting log..." + os.linesep)
+
+        disk_handler = logging.StreamHandler(disk_log_stream)
+        disk_handler.setFormatter(fmt)
+        log.addHandler(disk_handler)
 
         # perform sanity arguments checking before continuing
         chrom = None
@@ -222,9 +224,11 @@ def main(argsv):
         if args.annot is not None and args.sigmas is not None:
             log.info("Preparing annotation file")
             annot = fimpg.Annot.parse_annot(args.annot)
-            log.info("Preparing LD-score file")
+            log.info("Preparing SNP effect-size variance file")
             sigmas = fimpg.Sigmas.parse_sigmas(args.sigmas)
-            sigmas = sigmas.subset_by_pvalue(args.alpha)
+            sigmas = sigmas.subset_by_enrich_pvalue(args.alpha)
+            if args.force_non_negative:
+                sigmas.set_nonnegative()
 
             # we should check columns in sigmas are contained in annot here...
             sig_cnames = sigmas[fimpg.Sigmas.NAMECOL]
@@ -274,6 +278,7 @@ def main(argsv):
                         continue
 
                 # impute GWAS data for this partition
+                import pdb; pdb.set_trace()
                 if args.annot is not None and args.sigmas is not None:
                     imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, annot=part_annot, sigmas=sigmas,
                                                     prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)

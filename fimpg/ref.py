@@ -1,9 +1,11 @@
 import logging
-import numpy as np
-import numpy.linalg as lin
+import warnings
 
 import fimpg
+import numpy as np
+import numpy.linalg as lin
 import pandas as pd
+
 from pandas_plink import read_plink
 
 
@@ -153,5 +155,7 @@ class RefPanel(object):
 
     @classmethod
     def parse_plink(cls, path):
-        bim, fam, bed = read_plink(path, verbose=False)
+        with np.warnings.catch_warnings():
+            np.warnings.filterwarnings('ignore', 'FutureWarning')
+            bim, fam, bed = read_plink(path, verbose=False)
         return RefPanel(bim, fam, bed)
