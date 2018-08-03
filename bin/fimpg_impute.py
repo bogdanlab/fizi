@@ -278,7 +278,6 @@ def main(argsv):
                         continue
 
                 # impute GWAS data for this partition
-                import pdb; pdb.set_trace()
                 if args.annot is not None and args.sigmas is not None:
                     imputed_gwas = fimpg.impute_gwas(part_gwas, part_ref, annot=part_annot, sigmas=sigmas,
                                                     prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
