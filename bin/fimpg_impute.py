@@ -80,7 +80,7 @@ def get_command_string(args):
     rest_strs = []
     for cmd in rest:
         if "--" in cmd:
-            if cmd in ["--quiet", "--force-non-negative"]:
+            if cmd in ["--quiet", "--verbose", "--force-non-negative"]:
                 rest_strs.append("\t{}".format(cmd) + os.linesep)
             else:
                 rest_strs.append("\t{}".format(cmd))
@@ -137,6 +137,8 @@ def main(argsv):
     # misc options
     argp.add_argument("-q", "--quiet", default=False, action="store_true",
         help="Do not print anything to stdout.")
+    argp.add_argument("--verbose", default=False, action="store_true",
+        help="Verbose logging. Includes debug info.")
     argp.add_argument("-o", "--output", default="FIMPG",
         help="Prefix for output data.")
 
@@ -155,7 +157,10 @@ def main(argsv):
         FORMAT = "[%(asctime)s - %(levelname)s] %(message)s"
         DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
         log = logging.getLogger(fimpg.LOG)
-        log.setLevel(logging.INFO)
+        if args.verbose:
+            log.setLevel(logging.DEBUG)
+        else:
+            log.setLevel(logging.INFO)
         fmt = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
 
         # write to stdout unless quiet is set
@@ -247,6 +252,7 @@ def main(argsv):
         with open("{}.sumstat".format(args.output), "w") as output:
 
             if args.locations is not None:
+                log.info("Preparing user-defined locations")
                 partitions = parse_locations(args.locations, chrom, start_bp, stop_bp)
             else:
                 partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
@@ -256,23 +262,26 @@ def main(argsv):
                 pstart = max(1, start - buffer_size)
                 pstop = stop + buffer_size
 
+                log.debug("Subsetting GWAS data by {}:{} - {}:{}".format(chrom, int(pstart), chrom, int(pstop)))
                 part_gwas = gwas.subset_by_pos(chrom, pstart, pstop)
                 if len(part_gwas) == 0:
-                    log.warning("No GWAS SNPs found at {}:{} - {}. Skipping".format(chrom, int(pstart), int(pstop)))
+                    log.warning("No GWAS SNPs found at {}:{} - {}:{}. Skipping".format(chrom, int(pstart), chrom, int(pstop)))
                     continue
 
+                log.debug("Subsetting reference SNP data by {}:{} - {}:{}".format(chrom, int(pstart), chrom, int(pstop)))
                 part_ref = ref.subset_by_pos(chrom, pstart, pstop)
                 if len(part_ref) == 0:
-                    log.warning("No reference SNPs found at {}:{} - {}. Skipping".format(chrom, int(pstart), int(pstop)))
+                    log.warning("No reference SNPs found at {}:{} - {}:{}. Skipping".format(chrom, int(pstart), chrom, int(pstop)))
                     imputed_gwas = fimpg.create_output(part_gwas, start=start, stop=stop)
                     fimpg.write_output(imputed_gwas, output, append=bool(idx))
                     continue
 
                 # should we just fall back to IMPG when no annotations overlap?
                 if args.annot is not None and args.sigmas is not None:
-                    part_annot = annot.subset_by_pos(chrom, start, stop)
+                    log.debug("Subsetting annotation data by {}:{} - {}:{}".format(chrom, int(pstart), chrom, int(pstop)))
+                    part_annot = annot.subset_by_pos(chrom, pstart, pstop)
                     if len(part_annot) == 0:
-                        log.warning("No annotations found at {}:{} - {}. Skipping".format(chrom, int(pstart), int(pstop)))
+                        log.warning("No annotations found at {}:{} - {}:{}. Skipping".format(chrom, int(pstart), chrom, int(pstop)))
                         imputed_gwas = fimpg.create_output(part_gwas, start=start, stop=stop)
                         fimpg.write_output(imputed_gwas, output, append=bool(idx))
                         continue

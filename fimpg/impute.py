@@ -142,6 +142,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         D = np.diag(gwas_n * np.dot(A, sigma_values))
 
     # compute linkage-disequilibrium estimate
+    log.debug("Estimating LD for {} SNPs".format(len(ref_snps)))
     LD = ref.estimate_LD(ref_snps, adjust=ridge)
     obs_flag = ~pd.isna(ref_snps.Z)
     to_impute = (~obs_flag).values
@@ -154,6 +155,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         return fimpg.create_output(gwas, start=start, stop=stop)
 
     mprop = nobs / float(nobs + nimp)
+    log.debug("Proportion of observed-SNPs / total-SNPs = {}".format(mprop))
     if mprop < prop:
         log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
         return fimpg.create_output(gwas, start=start, stop=stop)
@@ -170,11 +172,13 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
     try:
         flip_flags = alleles.apply(lambda y: FLIP_ALLELES[y])
         obsZ *= (-1) ** flip_flags
+        log.debug("Flipped {} alleles to match reference".format(sum(flip_flags)))
     except KeyError as e:
         msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
-        msg += 'Did you forget to use --merge-alleles with LDScore munge_sumstats.py?'
+        msg += 'Did you forget to use --merge-alleles with fimpg_munge.py?'
         raise KeyError(msg)
 
+    log.debug("Partitioning LD into quadrants")
     Voo_ld = LD[obs].T[obs].T
     Vuo_ld = LD[to_impute].T[obs].T
     Vou_ld = Vuo_ld.T
@@ -190,8 +194,10 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         ooV = Voo_ld
         uuV = Vuu_ld
 
+    log.debug("Computing inverse of variance-covariance matrix for {} observed SNPs".format(sum(obs)))
     ooVinv = lin.pinv(ooV)
 
+    log.debug("Imputing {} SNPs from {} observed Zscores".format(sum(to_impute), sum(obs)))
     # predict the Z-scores
     impZs = lin.multi_dot([uoV, ooVinv, obsZ])
 
