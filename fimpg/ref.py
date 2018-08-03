@@ -122,10 +122,12 @@ class RefPanel(object):
         return merged_snps
 
     def get_geno(self, snps=None):
-        if snps is None:
-            return self._geno.compute().T
-        else:
-            return self._geno[snps.i.values, :].compute().T
+        with np.warnings.catch_warnings():
+            np.warnings.filterwarnings('ignore', 'FutureWarning')
+            if snps is None:
+                return self._geno.compute().T
+            else:
+                return self._geno[snps.i.values, :].compute().T
 
     @property
     def sample_size(self):

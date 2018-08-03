@@ -139,9 +139,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         if gwas_n is None and GWAS.NCOL in gwas:
             gwas_n = np.median(gwas[GWAS.NCOL])
 
-        d = gwas_n * np.dot(A, sigma_values)
-        d[d < 0] = 0
-        D = np.diag(d)
+        D = np.diag(gwas_n * np.dot(A, sigma_values))
 
     # compute linkage-disequilibrium estimate
     LD = ref.estimate_LD(ref_snps, adjust=ridge)
