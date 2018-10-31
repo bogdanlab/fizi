@@ -2,7 +2,7 @@
 FIZI leverages functional information together with reference linkage-disequilibrium (LD) to
 impute GWAS summary statistics (Z-score).
 
-This repository serves as the home for the python implementation of the algorithm described in XX.
+[//]: # (This repository serves as the home for the python implementation of the algorithm described in XX.)
 
 Installation
 ----
@@ -49,7 +49,7 @@ command
 
 Software and support
 -----
-If you have any questions or comments please contact nmancuso@mednet.ucla.edu
+If you have any questions or comments please contact nmancuso@mednet.ucla.edu and/or meganroytman@gmail.com
 
 For performing various inferences using summary data from large-scale GWASs please find the following useful software:
 
