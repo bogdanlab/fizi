@@ -1,4 +1,7 @@
-# FIMPG
+# IDE stuff
+*.idea
+
+# FIZI
 *.sumstat
 
 # Byte-compiled / optimized / DLL files

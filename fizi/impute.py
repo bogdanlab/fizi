@@ -1,13 +1,13 @@
 import itertools as it
 import logging
 
-import fimpg
+import fizi
 import numpy as np
-import numpy.linalg as lin
 import pandas as pd
+import scipy.linalg as lin
 import scipy.stats as stats
 
-from scipy.linalg import svdvals
+from numpy.linalg import multi_dot as mdot
 
 
 __all__ = ['create_output', 'impute_gwas', 'VALID_SNPS', 'MATCH_ALLELES']
@@ -45,8 +45,8 @@ FLIP_ALLELES = {''.join(x):
 
 def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None, pvals=None, start=None, stop=None):
 
-    GWAS = fimpg.GWAS
-    RefPanel = fimpg.RefPanel
+    GWAS = fizi.GWAS
+    RefPanel = fizi.RefPanel
 
     nall = len(obs_snps)
     nimp = len(imp_snps) if imp_snps is not None else 0
@@ -107,15 +107,15 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
     return df
 
 
-def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, stop=None, prop=0.4, ridge=0.1, epsilon=1e-6):
-    log = logging.getLogger(fimpg.LOG)
+def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, stop=None, prop=0.4, ridge=0.1):
+    log = logging.getLogger(fizi.LOG)
     log.info("Starting imputation at region {}".format(ref))
 
     # cut down on typing
-    GWAS = fimpg.GWAS
-    RefPanel = fimpg.RefPanel
-    Annot = fimpg.Annot
-    Sigmas = fimpg.Sigmas
+    GWAS = fizi.GWAS
+    RefPanel = fizi.RefPanel
+    Annot = fizi.Annot
+    Sigmas = fizi.Sigmas
 
     # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
@@ -123,7 +123,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
 
     if annot is not None and sigmas is not None:
         # merge annotations with merged reference snps
-        ref_snps = pd.merge(ref_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=fimpg.Annot.SNPCOL)
+        ref_snps = pd.merge(ref_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=Annot.SNPCOL)
 
         # this assumes all sigmas columns are in the annotations
         # we should perform a sanity check when the program launches...
@@ -152,15 +152,14 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
     nimp = np.sum(to_impute)
     if nimp == 0:
         log.info("Skipping region {}. No SNPs require imputation".format(ref))
-        return fimpg.create_output(gwas, start=start, stop=stop)
+        return fizi.create_output(gwas, start=start, stop=stop)
 
     mprop = nobs / float(nobs + nimp)
     log.debug("Proportion of observed-SNPs / total-SNPs = {}".format(mprop))
     if mprop < prop:
         log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
-        return fimpg.create_output(gwas, start=start, stop=stop)
+        return fizi.create_output(gwas, start=start, stop=stop)
 
-    obs_snps = ref_snps[obs]
     imp_snps = ref_snps[to_impute]
 
     # check for allele flips
@@ -175,7 +174,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         log.debug("Flipped {} alleles to match reference".format(sum(flip_flags)))
     except KeyError as e:
         msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
-        msg += 'Did you forget to use --merge-alleles with fimpg_munge.py?'
+        msg += 'Did you forget to use --merge-alleles with fizi_munge.py?'
         raise KeyError(msg)
 
     log.debug("Partitioning LD into quadrants")
@@ -186,9 +185,9 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
     if sigmas is not None and annot is not None:
         Do = D.T[obs].T[obs]
         Du = D.T[to_impute].T[to_impute]
-        uoV = Vuo_ld + lin.multi_dot([Vuu_ld, Du, Vuo_ld]) + lin.multi_dot([Vuo_ld, Do, Voo_ld])
-        ooV = Voo_ld + lin.multi_dot([Voo_ld, Do, Voo_ld]) + lin.multi_dot([Vou_ld, Du, Vuo_ld])
-        uuV = Vuu_ld + lin.multi_dot([Vuu_ld, Du, Vuu_ld]) + lin.multi_dot([Vuo_ld, Do, Vou_ld])
+        uoV = Vuo_ld + mdot([Vuu_ld, Du, Vuo_ld]) + mdot([Vuo_ld, Do, Voo_ld])
+        ooV = Voo_ld + mdot([Voo_ld, Do, Voo_ld]) + mdot([Vou_ld, Du, Vuo_ld])
+        uuV = Vuu_ld + mdot([Vuu_ld, Du, Vuu_ld]) + mdot([Vuo_ld, Do, Vou_ld])
     else:
         uoV = Vuo_ld
         ooV = Voo_ld
@@ -199,18 +198,18 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
 
     log.debug("Imputing {} SNPs from {} observed Zscores".format(sum(to_impute), sum(obs)))
     # predict the Z-scores
-    impZs = lin.multi_dot([uoV, ooVinv, obsZ])
-
-    # compute two-sided z-test for p-value
-    pvals = stats.chi2.sf(impZs ** 2, 1)
+    impZs = mdot([uoV, ooVinv, obsZ])
 
     # compute marginal r2-pred scores
     # we re-scale by the marginal prior to account for inflation due to prior info
     # and adjustment to LD diagonal
     # this ensures that r2pred will always be between 0-1 (if D is PSD)
-    r2blup = np.diag(lin.multi_dot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
+    r2blup = np.diag(mdot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
 
-    df = fimpg.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
+    # compute two-sided z-test for p-value
+    pvals = stats.chi2.sf((impZs ** 2) / r2blup, 1)
+
+    df = fizi.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
     log.info("Completed imputation at region {}".format(ref))
 
     return df

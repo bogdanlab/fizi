@@ -1,17 +1,16 @@
 import pandas as pd
-import scipy.stats as stats
 
-import fimpg
+import fizi
 
 
 class AnnotSeries(pd.Series):
     @property
     def _constructor(self):
-        return fimpg.AnnotSeries
+        return fizi.AnnotSeries
 
     @property
     def _constructor_expanddim(self):
-        return fimpg.Annot
+        return fizi.Annot
 
 
 class Annot(pd.DataFrame):
@@ -33,11 +32,11 @@ class Annot(pd.DataFrame):
 
     @property
     def _constructor(self):
-        return fimpg.Annot
+        return fizi.Annot
 
     @property
     def _constructor_sliced(self):
-        return fimpg.AnnotSeries
+        return fizi.AnnotSeries
 
     def subset_by_pos(self, chrom, start, stop):
         if pd.api.types.is_string_dtype(self[Annot.CHRCOL]) or pd.api.types.is_categorical_dtype(self[Annot.CHRCOL]):
@@ -59,8 +58,8 @@ class Annot(pd.DataFrame):
     @classmethod
     def parse_annot(cls, stream):
         dtype_dict = {'SNP': str, 'BP': int}
-        cmp = fimpg.get_compression(stream)
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmp)
+        cmpr = fizi.get_compression(stream)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
         for column in Annot.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in annotation file".format(column))

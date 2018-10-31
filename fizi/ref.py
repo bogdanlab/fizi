@@ -1,9 +1,8 @@
 import logging
 import warnings
 
-import fimpg
+import fizi
 import numpy as np
-import numpy.linalg as lin
 import pandas as pd
 
 from pandas_plink import read_plink
@@ -42,7 +41,7 @@ class RefPanel(object):
         """
         Lazily iterate over location partitions
         """
-        log = logging.getLogger(fimpg.LOG)
+        log = logging.getLogger(fizi.LOG)
 
         chroms = self._snp_info[RefPanel.CHRCOL].unique()
 
@@ -117,8 +116,8 @@ class RefPanel(object):
 
     def overlap_gwas(self, gwas):
         df = self._snp_info
-        merged_snps = pd.merge(gwas, df, how="outer", left_on=fimpg.GWAS.SNPCOL, right_on=fimpg.RefPanel.SNPCOL)
-        merged_snps.drop_duplicates(subset=fimpg.RefPanel.SNPCOL, inplace=True)
+        merged_snps = pd.merge(gwas, df, how="outer", left_on=fizi.GWAS.SNPCOL, right_on=fizi.RefPanel.SNPCOL)
+        merged_snps.drop_duplicates(subset=fizi.RefPanel.SNPCOL, inplace=True)
         return merged_snps
 
     def get_geno(self, snps=None):

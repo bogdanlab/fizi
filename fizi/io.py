@@ -7,7 +7,7 @@ __all__ = ["get_compression", "write_output"]
 def get_compression(fh):
     # This function from LDSC regression
     # (c) 2014 Brendan Bulik-Sullivan and Hilary Finucane
-    '''Which sort of compression should we use with read_csv?'''
+    """Which sort of compression should we use with read_csv?"""
     if isinstance(fh, file):
         _, ext = os.path.splitext(fh.name)
     elif isinstance(fh, str):

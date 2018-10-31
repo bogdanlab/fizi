@@ -1,7 +1,7 @@
 import pandas as pd
 import scipy.stats as stats
 
-import fimpg
+import fizi
 
 __all__ = ["GWAS", "GWASSeries"]
 
@@ -9,11 +9,11 @@ __all__ = ["GWAS", "GWASSeries"]
 class GWASSeries(pd.Series):
     @property
     def _constructor(self):
-        return fimpg.GWASSeries
+        return fizi.GWASSeries
 
     @property
     def _constructor_expanddim(self):
-        return fimpg.GWAS
+        return fizi.GWAS
 
 
 class GWAS(pd.DataFrame):
@@ -44,11 +44,11 @@ class GWAS(pd.DataFrame):
 
     @property
     def _constructor(self):
-        return fimpg.GWAS
+        return fizi.GWAS
 
     @property
     def _constructor_sliced(self):
-        return fimpg.GWASSeries
+        return fizi.GWASSeries
 
     def subset_by_pos(self, chrom, start, stop):
         if pd.api.types.is_string_dtype(self[GWAS.CHRCOL]) or pd.api.types.is_categorical_dtype(self[GWAS.CHRCOL]):
@@ -70,8 +70,8 @@ class GWAS(pd.DataFrame):
     @classmethod
     def parse_gwas(cls, stream):
         dtype_dict = {'SNP': str, 'Z': float, 'N': float, 'A1': str, 'A2': str}
-        cmp = fimpg.get_compression(stream)
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmp)
+        cmpr = fizi.get_compression(stream)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
         for column in GWAS.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in summary statistics".format(column))

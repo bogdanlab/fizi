@@ -2,17 +2,17 @@ import pandas as pd
 import numpy as np
 import scipy.stats as stats
 
-import fimpg
+import fizi
 
 
 class SigmasSeries(pd.Series):
     @property
     def _constructor(self):
-        return fimpg.SigmasSeries
+        return fizi.SigmasSeries
 
     @property
     def _constructor_expanddim(self):
-        return fimpg.Sigmas
+        return fizi.Sigmas
 
 
 class Sigmas(pd.DataFrame):
@@ -34,17 +34,17 @@ class Sigmas(pd.DataFrame):
 
     @property
     def _constructor(self):
-        return fimpg.Sigmas
+        return fizi.Sigmas
 
     @property
     def _constructor_sliced(self):
-        return fimpg.SigmasSeries
+        return fizi.SigmasSeries
 
     def subset_by_tau_pvalue(self, pvalue, keep_baseline=True):
         zscores = self[Sigmas.SIGMAZCOL].values
         pval_flag = 2 * stats.norm.sf(zscores) < pvalue
         if keep_baseline:
-            sigmas = self.loc[(self[Sigmas.NAMECOL]=="base") | (pval_flag)]
+            sigmas = self.loc[(self[Sigmas.NAMECOL] == "base") | pval_flag]
         else:
             sigmas = self.loc[pval_flag]
 
@@ -55,7 +55,7 @@ class Sigmas(pd.DataFrame):
         pvalues[np.isnan(pvalues)] = 1.0
         pval_flag = pvalues < pvalue
         if keep_baseline:
-            sigmas = self.loc[(self[Sigmas.NAMECOL]=="base") | (pval_flag)]
+            sigmas = self.loc[(self[Sigmas.NAMECOL] == "base") | pval_flag]
         else:
             sigmas = self.loc[pval_flag]
 
@@ -71,8 +71,8 @@ class Sigmas(pd.DataFrame):
     @classmethod
     def parse_sigmas(cls, stream):
         dtype_dict = {'Category': str}
-        cmp = fimpg.get_compression(stream)
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmp)
+        cmpr = fizi.get_compression(stream)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
         for column in Sigmas.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in LDSC tau-estimates file".format(column))

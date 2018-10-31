@@ -4,15 +4,15 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="fimpg",
-    version="0.1",
+    name="fizi",
+    version="0.5",
     author="Nicholas Mancuso, Megan Roytman",
     author_email="nick.mancuso@gmail.com, meganroytman@gmail.com",
     description="Impute GWAS summary statistics using reference genotype data",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/bogdanlab/fimpg",
-    packages=["fimpg"],
+    url="https://github.com/bogdanlab/fizi",
+    packages=["fizi"],
     install_requires=[
           "numpy",
           "scipy",
@@ -20,8 +20,7 @@ setuptools.setup(
           "pandas-plink",
       ],
     scripts=[
-        "bin/fimpg_impute.py",
-        "bin/fimpg_munge.py",
+        "bin/fizi.py",
     ],
     classifiers=[
         "Programming Language :: Python :: 2",
