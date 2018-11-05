@@ -981,11 +981,11 @@ def main(argsv):
                       help="Diagonal adjustment for linkage-disequilibrium (LD) estimate.")
 
     # misc options
-    impg.add_argument("-q", "--quiet", default=False, action="store_true",
+    impp.add_argument("-q", "--quiet", default=False, action="store_true",
                       help="Do not print anything to stdout.")
-    impg.add_argument("--verbose", default=False, action="store_true",
+    impp.add_argument("--verbose", default=False, action="store_true",
                       help="Verbose logging. Includes debug info.")
-    impg.add_argument("-o", "--output", default="FIZI",
+    impp.add_argument("-o", "--output", default="FIZI",
                       help="Prefix for output data.")
 
     # set defaults
