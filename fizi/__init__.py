@@ -3,7 +3,7 @@ from .gwas import *
 from .impute import *
 from .io import *
 from .ref import *
-from .sigmas import *
+from .taus import *
 
 __version__ = "0.1"
 

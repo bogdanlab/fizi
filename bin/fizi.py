@@ -769,27 +769,27 @@ def impute(args):
         log.info("Preparing reference SNP data")
         ref = fizi.RefPanel.parse_plink(args.ref)
 
-        # load functional annotations and sigmas
-        if args.annot is not None and args.sigmas is not None:
+        # load functional annotations and taus
+        if args.annot is not None and args.taus is not None:
             log.info("Preparing annotation file")
             annot = fizi.Annot.parse_annot(args.annot)
             log.info("Preparing SNP effect-size variance file")
-            sigmas = fizi.Sigmas.parse_sigmas(args.sigmas)
-            sigmas = sigmas.subset_by_enrich_pvalue(args.alpha)
+            taus = fizi.Taus.parse_taus(args.taus)
+            taus = taus.subset_by_enrich_pvalue(args.alpha)
             if args.force_non_negative:
-                sigmas.set_nonnegative()
+                taus.set_nonnegative()
 
-            # we should check columns in sigmas are contained in annot here...
-            sig_cnames = sigmas[fizi.Sigmas.NAMECOL]
+            # we should check columns in taus are contained in annot here...
+            sig_cnames = taus[fizi.Taus.NAMECOL]
             annot_cnames = annot.columns.values
             for cn in sig_cnames:
                 if cn not in annot_cnames:
                     raise KeyError("Prior variance for {} not found in annotation file".format(cn))
 
         # parity check for functional data
-        if args.annot is not None and args.sigmas is None:
-            raise ValueError("Annotation requires corresponding LDSC escimates (--sigmas) file")
-        if args.annot is None and args.sigmas is not None:
+        if args.annot is not None and args.taus is None:
+            raise ValueError("Annotation requires corresponding LDSC escimates (--taus) file")
+        if args.annot is None and args.taus is not None:
             raise ValueError("LDSC estimates requires corresponding annotation (--annot) file")
 
         log.info("Starting summary statistics imputation with window size {} and buffer size {}".format(window_size, buffer_size))
@@ -821,7 +821,7 @@ def impute(args):
                     continue
 
                 # should we just fall back to IMPG when no annotations overlap?
-                if args.annot is not None and args.sigmas is not None:
+                if args.annot is not None and args.taus is not None:
                     log.debug("Subsetting annotation data by {}:{} - {}:{}".format(chrom, int(pstart), chrom, int(pstop)))
                     part_annot = annot.subset_by_pos(chrom, pstart, pstop)
                     if len(part_annot) == 0:
@@ -831,8 +831,8 @@ def impute(args):
                         continue
 
                 # impute GWAS data for this partition
-                if args.annot is not None and args.sigmas is not None:
-                    imputed_gwas = fizi.impute_gwas(part_gwas, part_ref, annot=part_annot, sigmas=sigmas,
+                if args.annot is not None and args.taus is not None:
+                    imputed_gwas = fizi.impute_gwas(part_gwas, part_ref, annot=part_annot, taus=taus,
                                                     prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
                 else:
                     imputed_gwas = fizi.impute_gwas(part_gwas, part_ref,
@@ -941,7 +941,7 @@ def main(argsv):
     # functional arguments
     impp.add_argument("--annot", default=None, type=argparse.FileType("r"),
                       help="Path to SNP functional annotation data. Should be in LDScore regression-style format. Supports gzip and bz2 compression.")
-    impp.add_argument("--sigmas", default=None, type=argparse.FileType("r"),
+    impp.add_argument("--taus", default=None, type=argparse.FileType("r"),
                       help="Path to LDScore regression output. Must contain coefficient estimates. Supports gzip and bz2 compression.")
     impp.add_argument("--alpha", default=1.00, type=float,
                       help="Significance threshold to determine which functional categories to keep.")

@@ -107,7 +107,7 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
     return df
 
 
-def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, stop=None, prop=0.4, ridge=0.1):
+def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=None, prop=0.4, ridge=0.1):
     log = logging.getLogger(fizi.LOG)
     log.info("Starting imputation at region {}".format(ref))
 
@@ -115,20 +115,20 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
     GWAS = fizi.GWAS
     RefPanel = fizi.RefPanel
     Annot = fizi.Annot
-    Sigmas = fizi.Sigmas
+    Taus = fizi.Taus
 
     # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
     ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
 
-    if annot is not None and sigmas is not None:
+    if annot is not None and taus is not None:
         # merge annotations with merged reference snps
         ref_snps = pd.merge(ref_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=Annot.SNPCOL)
 
-        # this assumes all sigmas columns are in the annotations
+        # this assumes all taus columns are in the annotations
         # we should perform a sanity check when the program launches...
-        sigma_values = sigmas[Sigmas.SIGMACOL]
-        annot_names = sigmas[Sigmas.NAMECOL].values.flatten()
+        sigma_values = taus[Taus.TAUCOL]
+        annot_names = taus[Taus.NAMECOL].values.flatten()
         A = ref_snps[annot_names].values
 
         # this assumes intercept is first...
@@ -140,6 +140,13 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
             gwas_n = np.median(gwas[GWAS.NCOL])
 
         D = np.diag(gwas_n * np.dot(A, sigma_values))
+
+        # Drop prior variance if sum is less than 0
+        # This still allows for some negative estimates being used to reduce the overall variance
+        # While guarding against nonsensical results
+        flag = D < 0
+        log.info("{} SNPs had negative variance estimates. Projecting back to PSD.".format(sum(flag)))
+        D[flag] = 0
 
     # compute linkage-disequilibrium estimate
     log.debug("Estimating LD for {} SNPs".format(len(ref_snps)))
@@ -174,7 +181,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
         log.debug("Flipped {} alleles to match reference".format(sum(flip_flags)))
     except KeyError as e:
         msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
-        msg += 'Did you forget to use --merge-alleles with fizi_munge.py?'
+        msg += 'Did you forget to use --merge-alleles with fizi.py?'
         raise KeyError(msg)
 
     log.debug("Partitioning LD into quadrants")
@@ -182,7 +189,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, sigmas=None, start=None, sto
     Vuo_ld = LD[to_impute].T[obs].T
     Vou_ld = Vuo_ld.T
     Vuu_ld = LD[to_impute].T[to_impute].T
-    if sigmas is not None and annot is not None:
+    if taus is not None and annot is not None:
         Do = D.T[obs].T[obs]
         Du = D.T[to_impute].T[to_impute]
         uoV = Vuo_ld + mdot([Vuu_ld, Du, Vuo_ld]) + mdot([Vuo_ld, Do, Voo_ld])
