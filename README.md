@@ -2,6 +2,8 @@
 FIZI leverages functional information together with reference linkage-disequilibrium (LD) to
 impute GWAS summary statistics (Z-score).
 
+This README is a working draft and will be expanded soon.
+
 [//]: # (This repository serves as the home for the python implementation of the algorithm described in XX.)
 
 Installation
