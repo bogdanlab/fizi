@@ -144,8 +144,9 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
         # Drop prior variance if sum is less than 0
         # This still allows for some negative estimates being used to reduce the overall variance
         # While guarding against nonsensical results
+        # This may not be optimal. It might be better to project XDX back to PSD rather than D
         flag = D < 0
-        log.info("{} SNPs had negative variance estimates. Projecting back to PSD.".format(sum(flag)))
+        log.info("{} SNPs had negative prior variance. Projecting back to PSD.".format(np.sum(flag)))
         D[flag] = 0
 
     # compute linkage-disequilibrium estimate
@@ -214,7 +215,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
     r2blup = np.diag(mdot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
 
     # compute two-sided z-test for p-value
-    pvals = stats.chi2.sf((impZs ** 2) / r2blup, 1)
+    pvals = stats.chi2.sf(impZs ** 2, 1)
 
     df = fizi.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
     log.info("Completed imputation at region {}".format(ref))

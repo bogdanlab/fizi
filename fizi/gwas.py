@@ -77,6 +77,6 @@ class GWAS(pd.DataFrame):
                 raise ValueError("{}-column not found in summary statistics".format(column))
 
         if GWAS.PCOL not in df:
-            df[GWAS.PCOL] = stats.chi2.sf(df[GWAS.ZCOL] ** 2, 1)
+            df[GWAS.PCOL] = stats.chi2.sf(df[GWAS.ZCOL].values ** 2, 1)
 
         return cls(df)

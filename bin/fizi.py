@@ -927,6 +927,14 @@ def main(argsv):
     munp.add_argument('--keep-maf', default=False, action='store_true',
                       help='Keep the MAF column (if one exists).')
 
+    # misc options
+    munp.add_argument("-q", "--quiet", default=False, action="store_true",
+                      help="Do not print anything to stdout.")
+    munp.add_argument("--verbose", default=False, action="store_true",
+                      help="Verbose logging. Includes debug info.")
+    munp.add_argument("-o", "--output", default="FIZI",
+                      help="Prefix for output data.")
+
     munp.set_defaults(func=munge)
 
     # add imputation parser
@@ -973,11 +981,11 @@ def main(argsv):
                       help="Diagonal adjustment for linkage-disequilibrium (LD) estimate.")
 
     # misc options
-    argp.add_argument("-q", "--quiet", default=False, action="store_true",
+    impg.add_argument("-q", "--quiet", default=False, action="store_true",
                       help="Do not print anything to stdout.")
-    argp.add_argument("--verbose", default=False, action="store_true",
+    impg.add_argument("--verbose", default=False, action="store_true",
                       help="Verbose logging. Includes debug info.")
-    argp.add_argument("-o", "--output", default="FIZI",
+    impg.add_argument("-o", "--output", default="FIZI",
                       help="Prefix for output data.")
 
     # set defaults
