@@ -1,10 +1,13 @@
 import logging
 import warnings
 
-import fizi
+import pyfizi
 import numpy as np
 import pandas as pd
 
+import scipy.linalg as lin
+
+from numpy.linalg import multi_dot as mdot
 from pandas_plink import read_plink
 
 
@@ -41,7 +44,7 @@ class RefPanel(object):
         """
         Lazily iterate over location partitions
         """
-        log = logging.getLogger(fizi.LOG)
+        log = logging.getLogger(pyfizi.LOG)
 
         chroms = self._snp_info[RefPanel.CHRCOL].unique()
 
@@ -116,8 +119,8 @@ class RefPanel(object):
 
     def overlap_gwas(self, gwas):
         df = self._snp_info
-        merged_snps = pd.merge(gwas, df, how="outer", left_on=fizi.GWAS.SNPCOL, right_on=fizi.RefPanel.SNPCOL)
-        merged_snps.drop_duplicates(subset=fizi.RefPanel.SNPCOL, inplace=True)
+        merged_snps = pd.merge(gwas, df, how="outer", left_on=pyfizi.GWAS.SNPCOL, right_on=pyfizi.RefPanel.SNPCOL)
+        merged_snps.drop_duplicates(subset=pyfizi.RefPanel.SNPCOL, inplace=True)
         return merged_snps
 
     def get_geno(self, snps=None):
@@ -132,7 +135,7 @@ class RefPanel(object):
     def sample_size(self):
         return len(self._sample_info)
 
-    def estimate_LD(self, snps=None, adjust=0.1):
+    def estimate_ld(self, snps=None, adjust=0.1, return_eigvals=False):
         G = self.get_geno(snps)
         n, p = G.shape
         col_mean = np.nanmean(G, axis=0)
@@ -141,8 +144,18 @@ class RefPanel(object):
         inds = np.where(np.isnan(G))
         G[inds] = np.take(col_mean, inds[1])
 
-        LD = np.corrcoef(G.T) + np.eye(p) * adjust
-        return LD
+        if return_eigvals:
+            G = (G - np.mean(G, axis=0)) / np.std(G, axis=0)
+            _, S, V = lin.svd(G, full_matrices=True)
+
+            # adjust 
+            D = np.full(p, adjust)
+            D[:len(S)] = D[:len(S)] + (S**2 / n)
+
+            # same as `mdot([V.T, np.diag(D), V]), D)`
+            return (np.dot(V.T * D, V), D)
+        else:
+            return np.corrcoef(G.T) + np.eye(p) * adjust
 
     def clean_chrom(self, chrom):
         df = self._snp_info

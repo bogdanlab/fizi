@@ -1,16 +1,16 @@
 import pandas as pd
 
-import fizi
+import pyfizi
 
 
 class AnnotSeries(pd.Series):
     @property
     def _constructor(self):
-        return fizi.AnnotSeries
+        return pyfizi.AnnotSeries
 
     @property
     def _constructor_expanddim(self):
-        return fizi.Annot
+        return pyfizi.Annot
 
 
 class Annot(pd.DataFrame):
@@ -32,11 +32,11 @@ class Annot(pd.DataFrame):
 
     @property
     def _constructor(self):
-        return fizi.Annot
+        return pyfizi.Annot
 
     @property
     def _constructor_sliced(self):
-        return fizi.AnnotSeries
+        return pyfizi.AnnotSeries
 
     def subset_by_pos(self, chrom, start, stop):
         if pd.api.types.is_string_dtype(self[Annot.CHRCOL]) or pd.api.types.is_categorical_dtype(self[Annot.CHRCOL]):
@@ -58,7 +58,7 @@ class Annot(pd.DataFrame):
     @classmethod
     def parse_annot(cls, stream):
         dtype_dict = {'SNP': str, 'BP': int}
-        cmpr = fizi.get_compression(stream)
+        cmpr = pyfizi.get_compression(stream)
         df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
         for column in Annot.REQ_COLS:
             if column not in df:

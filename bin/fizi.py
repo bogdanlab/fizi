@@ -13,7 +13,7 @@ import os
 import re
 import sys
 
-import fizi
+import pyfizi
 import numpy as np
 import pandas as pd
 
@@ -189,7 +189,7 @@ def parse_locations(locations, chrom=None, start_bp=None, stop_bp=None):
 
 def get_command_string(args):
     """
-    Format fizi call and options into a string for logging/printing
+    Format pyfizi call and options into a string for logging/printing
     """
     base = "fizi.py " + " ".join(args[:2]) + os.linesep
     rest = args[2:]
@@ -310,7 +310,7 @@ def filter_frq(frq, log, args):
 
 def filter_alleles(a):
     """Remove alleles that do not describe strand-unambiguous SNPs"""
-    return a.isin(fizi.VALID_SNPS)
+    return a.isin(pyfizi.VALID_SNPS)
 
 
 def parse_dat(dat_gen, convert_colname, merge_alleles, log, args):
@@ -500,7 +500,7 @@ def allele_merge(dat, alleles, log):
     dat = pd.merge(dat, alleles, how='left', on='SNP', sort=False).reset_index(drop=True)
     ii = dat.A1.notnull()
     a1234 = dat.A1[ii] + dat.A2[ii] + dat.MA[ii]
-    match = a1234.apply(lambda y: y in fizi.MATCH_ALLELES)
+    match = a1234.apply(lambda y: y in pyfizi.MATCH_ALLELES)
     jj = pd.Series(np.zeros(len(dat), dtype=bool))
     jj[ii] = match        # This breaks the dtype sometimes
     jj = jj.astype(bool)  # Enforce bool dtype
@@ -519,7 +519,7 @@ def allele_merge(dat, alleles, log):
 
 
 def munge(args):
-    log = logging.getLogger(fizi.LOG)
+    log = logging.getLogger(pyfizi.LOG)
     try:
         if args.sumstats is None:
             raise ValueError('The --sumstats flag is required')
@@ -725,7 +725,7 @@ def munge(args):
 
 
 def impute(args):
-    log = logging.getLogger(fizi.LOG)
+    log = logging.getLogger(pyfizi.LOG)
     try:
         # perform sanity arguments checking before continuing
         chrom = None
@@ -763,24 +763,24 @@ def impute(args):
 
         # load GWAS summary data
         log.info("Preparing GWAS summary file")
-        gwas = fizi.GWAS.parse_gwas(args.gwas)
+        gwas = pyfizi.GWAS.parse_gwas(args.gwas)
 
         # load reference genotype data
         log.info("Preparing reference SNP data")
-        ref = fizi.RefPanel.parse_plink(args.ref)
+        ref = pyfizi.RefPanel.parse_plink(args.ref)
 
         # load functional annotations and taus
         if args.annot is not None and args.taus is not None:
             log.info("Preparing annotation file")
-            annot = fizi.Annot.parse_annot(args.annot)
+            annot = pyfizi.Annot.parse_annot(args.annot)
             log.info("Preparing SNP effect-size variance file")
-            taus = fizi.Taus.parse_taus(args.taus)
+            taus = pyfizi.Taus.parse_taus(args.taus)
             taus = taus.subset_by_enrich_pvalue(args.alpha)
             if args.force_non_negative:
                 taus.set_nonnegative()
 
             # we should check columns in taus are contained in annot here...
-            sig_cnames = taus[fizi.Taus.NAMECOL]
+            sig_cnames = taus[pyfizi.Taus.NAMECOL]
             annot_cnames = annot.columns.values
             for cn in sig_cnames:
                 if cn not in annot_cnames:
@@ -793,6 +793,7 @@ def impute(args):
             raise ValueError("LDSC estimates requires corresponding annotation (--annot) file")
 
         log.info("Starting summary statistics imputation with window size {} and buffer size {}".format(window_size, buffer_size))
+        written = False
         with open("{}.sumstat".format(args.output), "w") as output:
 
             if args.locations is not None:
@@ -816,8 +817,9 @@ def impute(args):
                 part_ref = ref.subset_by_pos(chrom, pstart, pstop)
                 if len(part_ref) == 0:
                     log.warning("No reference SNPs found at {}:{} - {}:{}. Skipping".format(chrom, int(pstart), chrom, int(pstop)))
-                    imputed_gwas = fizi.create_output(part_gwas, start=start, stop=stop)
-                    fizi.write_output(imputed_gwas, output, append=bool(idx))
+                    imputed_gwas = pyfizi.create_output(part_gwas, start=start, stop=stop)
+                    pyfizi.write_output(imputed_gwas, output, append=bool(idx))
+                    written = True
                     continue
 
                 # should we just fall back to IMPG when no annotations overlap?
@@ -826,19 +828,21 @@ def impute(args):
                     part_annot = annot.subset_by_pos(chrom, pstart, pstop)
                     if len(part_annot) == 0:
                         log.warning("No annotations found at {}:{} - {}:{}. Skipping".format(chrom, int(pstart), chrom, int(pstop)))
-                        imputed_gwas = fizi.create_output(part_gwas, start=start, stop=stop)
-                        fizi.write_output(imputed_gwas, output, append=bool(idx))
+                        imputed_gwas = pyfizi.create_output(part_gwas, start=start, stop=stop)
+                        pyfizi.write_output(imputed_gwas, output, append=bool(idx))
+                        written = True
                         continue
 
                 # impute GWAS data for this partition
                 if args.annot is not None and args.taus is not None:
-                    imputed_gwas = fizi.impute_gwas(part_gwas, part_ref, annot=part_annot, taus=taus,
+                    imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref, annot=part_annot, taus=taus,
                                                     prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
                 else:
-                    imputed_gwas = fizi.impute_gwas(part_gwas, part_ref,
+                    imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref,
                                                     prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
 
-                fizi.write_output(imputed_gwas, output, append=bool(idx))
+                pyfizi.write_output(imputed_gwas, output, append=written)
+                written = True
 
     except Exception as err:
         log.error(err.message)
@@ -894,29 +898,29 @@ def main(argsv):
 
     # optional args to specify column names
     munp.add_argument('--snp', default=None, type=str,
-                      help='Name of SNP column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of SNP column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--N-col', default=None, type=str,
-                      help='Name of N column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of N column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--N-cas-col', default=None, type=str,
-                      help='Name of N column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of N column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--N-con-col', default=None, type=str,
-                      help='Name of N column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of N column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--a1', default=None, type=str,
-                      help='Name of A1 column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of A1 column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--a2', default=None, type=str,
-                      help='Name of A2 column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of A2 column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--p', default=None, type=str,
-                      help='Name of p-value column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of p-value column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--frq', default=None, type=str,
-                      help='Name of FRQ or MAF column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of FRQ or MAF column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--signed-sumstats', default=None, type=str,
                       help='Name of signed sumstat column, comma null value (e.g., Z,0 or OR,1). NB: case insensitive.')
     munp.add_argument('--info', default=None, type=str,
-                      help='Name of INFO column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of INFO column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--info-list', default=None, type=str,
                       help='Comma-separated list of INFO columns. Will filter on the mean. NB: case insensitive.')
     munp.add_argument('--nstudy', default=None, type=str,
-                      help='Name of NSTUDY column (if not a name that fizi understands). NB: case insensitive.')
+                      help='Name of NSTUDY column (if not a name that pyfizi understands). NB: case insensitive.')
     munp.add_argument('--nstudy-min', default=None, type=float,
                       help='Minimum # of studies. Default is to remove everything below the max, unless there is an N column,'
                            ' in which case do nothing.')
@@ -997,13 +1001,13 @@ def main(argsv):
     cmd_str = get_command_string(argsv)
 
     masthead =  "====================================" + os.linesep
-    masthead += "               FIZI v{}             ".format(fizi.VERSION) + os.linesep
+    masthead += "               FIZI v{}             ".format(pyfizi.VERSION) + os.linesep
     masthead += "====================================" + os.linesep
 
     # setup logging
     FORMAT = "[%(asctime)s - %(levelname)s] %(message)s"
     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-    log = logging.getLogger(fizi.LOG)
+    log = logging.getLogger(pyfizi.LOG)
     log.setLevel(logging.INFO)
     fmt = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
 

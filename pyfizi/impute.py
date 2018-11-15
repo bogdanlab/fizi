@@ -1,7 +1,7 @@
 import itertools as it
 import logging
 
-import fizi
+import pyfizi
 import numpy as np
 import pandas as pd
 import scipy.linalg as lin
@@ -45,8 +45,8 @@ FLIP_ALLELES = {''.join(x):
 
 def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None, pvals=None, start=None, stop=None):
 
-    GWAS = fizi.GWAS
-    RefPanel = fizi.RefPanel
+    GWAS = pyfizi.GWAS
+    RefPanel = pyfizi.RefPanel
 
     nall = len(obs_snps)
     nimp = len(imp_snps) if imp_snps is not None else 0
@@ -108,14 +108,14 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
 
 
 def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=None, prop=0.4, ridge=0.1):
-    log = logging.getLogger(fizi.LOG)
+    log = logging.getLogger(pyfizi.LOG)
     log.info("Starting imputation at region {}".format(ref))
 
     # cut down on typing
-    GWAS = fizi.GWAS
-    RefPanel = fizi.RefPanel
-    Annot = fizi.Annot
-    Taus = fizi.Taus
+    GWAS = pyfizi.GWAS
+    RefPanel = pyfizi.RefPanel
+    Annot = pyfizi.Annot
+    Taus = pyfizi.Taus
 
     # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
@@ -141,17 +141,10 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
 
         D = np.diag(gwas_n * np.dot(A, sigma_values))
 
-        # Drop prior variance if sum is less than 0
-        # This still allows for some negative estimates being used to reduce the overall variance
-        # While guarding against nonsensical results
-        # This may not be optimal. It might be better to project XDX back to PSD rather than D
-        flag = D < 0
-        log.info("{} SNPs had negative prior variance. Projecting back to PSD.".format(np.sum(flag)))
-        D[flag] = 0
-
     # compute linkage-disequilibrium estimate
     log.debug("Estimating LD for {} SNPs".format(len(ref_snps)))
-    LD = ref.estimate_LD(ref_snps, adjust=ridge)
+    LD = ref.estimate_ld(ref_snps, adjust=ridge)
+
     obs_flag = ~pd.isna(ref_snps.Z)
     to_impute = (~obs_flag).values
     obs = obs_flag.values
@@ -160,13 +153,13 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
     nimp = np.sum(to_impute)
     if nimp == 0:
         log.info("Skipping region {}. No SNPs require imputation".format(ref))
-        return fizi.create_output(gwas, start=start, stop=stop)
+        return pyfizi.create_output(gwas, start=start, stop=stop)
 
     mprop = nobs / float(nobs + nimp)
     log.debug("Proportion of observed-SNPs / total-SNPs = {}".format(mprop))
     if mprop < prop:
         log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
-        return fizi.create_output(gwas, start=start, stop=stop)
+        return pyfizi.create_output(gwas, start=start, stop=stop)
 
     imp_snps = ref_snps[to_impute]
 
@@ -182,7 +175,7 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
         log.debug("Flipped {} alleles to match reference".format(sum(flip_flags)))
     except KeyError as e:
         msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
-        msg += 'Did you forget to use --merge-alleles with fizi.py?'
+        msg += 'Did you forget to use --merge-alleles with pyfizi.py?'
         raise KeyError(msg)
 
     log.debug("Partitioning LD into quadrants")
@@ -208,16 +201,13 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
     # predict the Z-scores
     impZs = mdot([uoV, ooVinv, obsZ])
 
-    # compute marginal r2-pred scores
-    # we re-scale by the marginal prior to account for inflation due to prior info
-    # and adjustment to LD diagonal
-    # this ensures that r2pred will always be between 0-1 (if D is PSD)
+    # compute r2-pred scores
     r2blup = np.diag(mdot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
 
     # compute two-sided z-test for p-value
     pvals = stats.chi2.sf(impZs ** 2, 1)
 
-    df = fizi.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
+    df = pyfizi.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
     log.info("Completed imputation at region {}".format(ref))
 
     return df

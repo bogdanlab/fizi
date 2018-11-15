@@ -1,7 +1,7 @@
 import pandas as pd
 import scipy.stats as stats
 
-import fizi
+import pyfizi
 
 __all__ = ["GWAS", "GWASSeries"]
 
@@ -9,11 +9,11 @@ __all__ = ["GWAS", "GWASSeries"]
 class GWASSeries(pd.Series):
     @property
     def _constructor(self):
-        return fizi.GWASSeries
+        return pyfizi.GWASSeries
 
     @property
     def _constructor_expanddim(self):
-        return fizi.GWAS
+        return pyfizi.GWAS
 
 
 class GWAS(pd.DataFrame):
@@ -44,11 +44,11 @@ class GWAS(pd.DataFrame):
 
     @property
     def _constructor(self):
-        return fizi.GWAS
+        return pyfizi.GWAS
 
     @property
     def _constructor_sliced(self):
-        return fizi.GWASSeries
+        return pyfizi.GWASSeries
 
     def subset_by_pos(self, chrom, start, stop):
         if pd.api.types.is_string_dtype(self[GWAS.CHRCOL]) or pd.api.types.is_categorical_dtype(self[GWAS.CHRCOL]):
@@ -70,7 +70,7 @@ class GWAS(pd.DataFrame):
     @classmethod
     def parse_gwas(cls, stream):
         dtype_dict = {'SNP': str, 'Z': float, 'N': float, 'A1': str, 'A2': str}
-        cmpr = fizi.get_compression(stream)
+        cmpr = pyfizi.get_compression(stream)
         df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
         for column in GWAS.REQ_COLS:
             if column not in df:

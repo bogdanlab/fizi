@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="fizi",
+    name="pyfizi",
     version="0.5",
     author="Nicholas Mancuso, Megan Roytman",
     author_email="nick.mancuso@gmail.com, meganroytman@gmail.com",
@@ -12,7 +12,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/bogdanlab/fizi",
-    packages=["fizi"],
+    packages=["pyfizi"],
     install_requires=[
           "numpy",
           "scipy",

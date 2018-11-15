@@ -2,17 +2,17 @@ import pandas as pd
 import numpy as np
 import scipy.stats as stats
 
-import fizi
+import pyfizi
 
 
 class TausSeries(pd.Series):
     @property
     def _constructor(self):
-        return fizi.TausSeries
+        return pyfizi.TausSeries
 
     @property
     def _constructor_expanddim(self):
-        return fizi.Taus
+        return pyfizi.Taus
 
 
 class Taus(pd.DataFrame):
@@ -34,11 +34,11 @@ class Taus(pd.DataFrame):
 
     @property
     def _constructor(self):
-        return fizi.Taus
+        return pyfizi.Taus
 
     @property
     def _constructor_sliced(self):
-        return fizi.TausSeries
+        return pyfizi.TausSeries
 
     def subset_by_tau_pvalue(self, pvalue, keep_baseline=True):
         zscores = self[Taus.TAUZCOL].values
@@ -71,7 +71,7 @@ class Taus(pd.DataFrame):
     @classmethod
     def parse_taus(cls, stream):
         dtype_dict = {'Category': str}
-        cmpr = fizi.get_compression(stream)
+        cmpr = pyfizi.get_compression(stream)
         df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
         for column in Taus.REQ_COLS:
             if column not in df:
