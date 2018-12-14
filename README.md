@@ -18,6 +18,8 @@ Installation
     
 2. FIZI can be installed using setuptools as 
 
+    `cd fizi` then
+    
     `python setup.py install --user` or optionally as
     
     `sudo python setup.py install` if you have root access and wish to install for all users
