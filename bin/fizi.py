@@ -818,7 +818,7 @@ def impute(args):
                 if len(part_ref) == 0:
                     log.warning("No reference SNPs found at {}:{} - {}:{}. Skipping".format(chrom, int(pstart), chrom, int(pstop)))
                     imputed_gwas = pyfizi.create_output(part_gwas, start=start, stop=stop)
-                    pyfizi.write_output(imputed_gwas, output, append=bool(idx))
+                    pyfizi.write_output(imputed_gwas, output, append=written)
                     written = True
                     continue
 
@@ -827,9 +827,10 @@ def impute(args):
                     log.debug("Subsetting annotation data by {}:{} - {}:{}".format(chrom, int(pstart), chrom, int(pstop)))
                     part_annot = annot.subset_by_pos(chrom, pstart, pstop)
                     if len(part_annot) == 0:
-                        log.warning("No annotations found at {}:{} - {}:{}. Skipping".format(chrom, int(pstart), chrom, int(pstop)))
-                        imputed_gwas = pyfizi.create_output(part_gwas, start=start, stop=stop)
-                        pyfizi.write_output(imputed_gwas, output, append=bool(idx))
+                        log.warning("No annotations found at {}:{} - {}:{}. Defaulting to ImpG".format(chrom, int(pstart), chrom, int(pstop)))
+                        imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref, prop=min_prop, start=start, stop=stop,
+                                                        ridge=args.ridge_term)
+                        pyfizi.write_output(imputed_gwas, output, append=written)
                         written = True
                         continue
 

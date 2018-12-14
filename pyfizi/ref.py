@@ -153,7 +153,7 @@ class RefPanel(object):
             D[:len(S)] = D[:len(S)] + (S**2 / n)
 
             # same as `mdot([V.T, np.diag(D), V]), D)`
-            return (np.dot(V.T * D, V), D)
+            return np.dot(V.T * D, V), D
         else:
             return np.corrcoef(G.T) + np.eye(p) * adjust
 

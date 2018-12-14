@@ -8,6 +8,10 @@ This README is a working draft and will be expanded soon.
 
 Installation
 ----
+0. Make sure that setuptools is up-to-date by typing the following command
+
+    `pip install setuptools --upgrade --user`
+    
 1. First grab the latest version of FIZI using git as
 
     `git clone https://github.com/bogdanlab/fizi`
@@ -23,12 +27,15 @@ Installation
     `fizi.py --help`
 
 4. If that did not work, and `--user` was specified, please check that your local user path is included in
-`$PATH` environment variable. `--user` is typically defined as `.local/bin` and can be appended to `$PATH`
+`$PATH` environment variable. `--user` location and can be appended to `$PATH`
 by executing
 
-    `export PATH=~/.local/bin:$PATH`
+    `` export PATH=`python -m site --user-base`/bin/:$PATH ``
     
-    which can be saved in `.bashrc` or `.bash_profile`
+    which can be saved in `.bashrc` or `.bash_profile`. To reload the environment type
+    
+    `source ~/.bashrc` or `source .bash_profile` depending where you entered it.
+
 
 Incorporating functional data to improve summary statistics imputation
 -----

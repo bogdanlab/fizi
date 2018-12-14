@@ -14,16 +14,17 @@ setuptools.setup(
     url="https://github.com/bogdanlab/fizi",
     packages=["pyfizi"],
     install_requires=[
-          "numpy",
-          "scipy",
-          "pandas>=0.17.0",
-          "pandas-plink",
+        "numpy>=1.14.5",
+        "scipy",
+        "pandas>=0.23.3",
+        "pandas-plink",
       ],
     scripts=[
         "bin/fizi.py",
     ],
     classifiers=[
-        "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GPL License",
         "Operating System :: OS Independent",
     ],
