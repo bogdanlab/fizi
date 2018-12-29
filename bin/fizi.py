@@ -637,7 +637,7 @@ def munge(args):
             if args.merge_alleles:
                 log.info(
                     'Reading list of SNPs for allele merge from {F}'.format(F=args.merge_alleles))
-                (openfunc, compression) = get_compression(args.merge_alleles)
+                _, compression = get_compression(args.merge_alleles)
                 merge_alleles = pd.read_csv(args.merge_alleles, compression=compression, header=0,
                                             delim_whitespace=True, na_values='.')
                 if any(x not in merge_alleles.columns for x in ["SNP", "A1", "A2"]):
@@ -653,7 +653,7 @@ def munge(args):
             else:
                 merge_alleles = None
     
-            (openfunc, compression) = get_compression(args.sumstats)
+            _, compression = get_compression(args.sumstats)
     
             # figure out which columns are going to involve sign information, so we can ensure
             # they're read as floats
@@ -717,7 +717,7 @@ def munge(args):
                 'METADATA - {N} Genome-wide significant SNPs (some may have been removed by filtering)'.format(N=(CHISQ > 29).sum()))
 
     except Exception as err:
-        log.error(err.message)
+        log.error(err)
     finally:
         log.info('Conversion finished')
 
@@ -846,7 +846,7 @@ def impute(args):
                 written = True
 
     except Exception as err:
-        log.error(err.message)
+        log.error(err)
     finally:
         log.info("Finished summary statistic imputation")
 
@@ -863,7 +863,7 @@ def main(argsv):
     munp = subp.add_parser("munge",
                            description="Munge summary statistics input to conform to FIZI requirements")
 
-    munp.add_argument('sumstats', type=argparse.FileType("r"),
+    munp.add_argument('sumstats',
                       help="Input filename.")
     munp.add_argument('--N', default=None, type=float,
                       help="Sample size If this option is not set, will try to infer the sample "
@@ -946,15 +946,15 @@ def main(argsv):
     impp = subp.add_parser("impute", description="GWAS summary statistics imputation with functional data.")
 
     # main arguments
-    impp.add_argument("gwas", type=argparse.FileType("r"),
+    impp.add_argument("gwas",
                       help="GWAS summary data. Supports gzip and bz2 compression.")
     impp.add_argument("ref",
                       help="Path to reference panel PLINK data.")
 
     # functional arguments
-    impp.add_argument("--annot", default=None, type=argparse.FileType("r"),
+    impp.add_argument("--annot", default=None,
                       help="Path to SNP functional annotation data. Should be in LDScore regression-style format. Supports gzip and bz2 compression.")
-    impp.add_argument("--taus", default=None, type=argparse.FileType("r"),
+    impp.add_argument("--taus", default=None,
                       help="Path to LDScore regression output. Must contain coefficient estimates. Supports gzip and bz2 compression.")
     impp.add_argument("--alpha", default=1.00, type=float,
                       help="Significance threshold to determine which functional categories to keep.")

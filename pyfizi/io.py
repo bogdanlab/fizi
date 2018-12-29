@@ -8,7 +8,7 @@ def get_compression(fh):
     # This function from LDSC regression
     # (c) 2014 Brendan Bulik-Sullivan and Hilary Finucane
     """Which sort of compression should we use with read_csv?"""
-    if isinstance(fh, file):
+    if hasattr(fh, "name"):
         _, ext = os.path.splitext(fh.name)
     elif isinstance(fh, str):
         _, ext = os.path.splitext(fh)
