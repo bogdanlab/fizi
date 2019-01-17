@@ -1,4 +1,3 @@
-import itertools as it
 import logging
 
 import pyfizi
@@ -10,37 +9,7 @@ import scipy.stats as stats
 from numpy.linalg import multi_dot as mdot
 
 
-__all__ = ['create_output', 'impute_gwas', 'VALID_SNPS', 'MATCH_ALLELES']
-
-
-# Base-handling code is from LDSC...
-# complementary bases
-COMPLEMENT = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
-# bases
-BASES = COMPLEMENT.keys()
-# true iff strand ambiguous
-STRAND_AMBIGUOUS = {''.join(x): x[0] == COMPLEMENT[x[1]]
-                    for x in it.product(BASES, BASES)
-                    if x[0] != x[1]}
-# SNPS we want to keep (pairs of alleles)
-VALID_SNPS = {x for x in map(lambda y: ''.join(y), it.product(BASES, BASES))
-              if x[0] != x[1] and not STRAND_AMBIGUOUS[x]}
-
-# T iff SNP 1 has the same alleles as SNP 2 (allowing for strand or ref allele flip).
-MATCH_ALLELES = {x for x in map(lambda y: ''.join(y), it.product(VALID_SNPS, VALID_SNPS))
-                 # strand and ref match
-                 if ((x[0] == x[2]) and (x[1] == x[3])) or
-                 # ref match, strand flip
-                 ((x[0] == COMPLEMENT[x[2]]) and (x[1] == COMPLEMENT[x[3]])) or
-                 # ref flip, strand match
-                 ((x[0] == x[3]) and (x[1] == x[2])) or
-                 ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]]))}  # strand and ref flip
-# T iff SNP 1 has the same alleles as SNP 2 w/ ref allele flip.
-FLIP_ALLELES = {''.join(x):
-                ((x[0] == x[3]) and (x[1] == x[2])) or  # strand match
-                # strand flip
-                ((x[0] == COMPLEMENT[x[3]]) and (x[1] == COMPLEMENT[x[2]]))
-                for x in MATCH_ALLELES}
+__all__ = ['create_output', 'impute_gwas']
 
 
 def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None, pvals=None, start=None, stop=None):
@@ -108,8 +77,27 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
 
 
 def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=None, prop=0.4, ridge=0.1):
+    """
+    Impute missing Z-scores using reference panel LD and optionally functional information.
+
+    :param gwas: pyfizi.GWAS object for the region
+    :param ref:  pyfizi.RefPanel object for reference genotype data at the region
+    :param gwas_n: numpy.ndarray or int GWAS sample size. If int assumes sample size is uniform at each SNP.
+                    Not required if 'N' is column in GWAS data (default: None)
+    :param annot: pyfizi.Annot object representing the functional annotations at the region (default: None)
+    :param taus: pyfizi.Tau object representing the prior variance terms for functional categories (default: None)
+    :param start: int Starting base-pair position for GWAS data
+    :param stop: int Stoping base-pair position for GWAS data
+    :param prop: float Minimum proportion of GWAS SNPs to total data that must be present for imputation (default=0.4)
+    :param ridge: float Ridge term to regularize LD estimation (default=0.1)
+
+    :return: pandas.DataFrame containing observed and imputed GWAS results
+    """
     log = logging.getLogger(pyfizi.LOG)
     log.info("Starting imputation at region {}".format(ref))
+
+    # fizi or impg
+    run_fizi = annot is not None and taus is not None
 
     # cut down on typing
     GWAS = pyfizi.GWAS
@@ -119,33 +107,12 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
 
     # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
-    ref_snps = merged_snps.loc[~pd.isna(merged_snps.i)]
-
-    if annot is not None and taus is not None:
-        # merge annotations with merged reference snps
-        ref_snps = pd.merge(ref_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=Annot.SNPCOL)
-
-        # this assumes all taus columns are in the annotations
-        # we should perform a sanity check when the program launches...
-        sigma_values = taus[Taus.TAUCOL]
-        annot_names = taus[Taus.NAMECOL].values.flatten()
-        A = ref_snps[annot_names].values
-
-        # this assumes intercept is first...
-        # fine for now but we should fix this...
-        A.T[0] = 1
-        A[np.isnan(A)] = 0
-
-        if gwas_n is None and GWAS.NCOL in gwas:
-            gwas_n = np.median(gwas[GWAS.NCOL])
-
-        D = np.diag(gwas_n * np.dot(A, sigma_values))
 
     # compute linkage-disequilibrium estimate
-    log.debug("Estimating LD for {} SNPs".format(len(ref_snps)))
-    LD = ref.estimate_ld(ref_snps, adjust=ridge)
+    log.debug("Estimating LD for {} SNPs".format(len(merged_snps)))
+    LD = ref.estimate_ld(merged_snps, adjust=ridge)
 
-    obs_flag = ~pd.isna(ref_snps.Z)
+    obs_flag = ~pd.isna(merged_snps.Z)
     to_impute = (~obs_flag).values
     obs = obs_flag.values
 
@@ -158,32 +125,43 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
     mprop = nobs / float(nobs + nimp)
     log.debug("Proportion of observed-SNPs / total-SNPs = {}".format(mprop))
     if mprop < prop:
-        log.info("Skipping region {}. Too few SNPs for imputation {}%".format(ref, mprop))
+        log.info("Skipping region {}. Too few SNPs for imputation {:.3}%".format(ref, mprop))
         return pyfizi.create_output(gwas, start=start, stop=stop)
 
-    imp_snps = ref_snps[to_impute]
+    imp_snps = merged_snps[to_impute]
 
     # check for allele flips
-    sset = ref_snps[obs_flag]
+    sset = merged_snps[obs_flag]
     obsZ = sset.Z.values
-    alleles = sset[GWAS.A1COL] + sset[GWAS.A2COL] + sset[RefPanel.A1COL] + sset[RefPanel.A2COL]
 
-    # from LDSC...
-    try:
-        flip_flags = alleles.apply(lambda y: FLIP_ALLELES[y])
-        obsZ *= (-1) ** flip_flags
-        log.debug("Flipped {} alleles to match reference".format(sum(flip_flags)))
-    except KeyError as e:
-        msg = 'Incompatible alleles in .sumstats files: %s. ' % e.args
-        msg += 'Did you forget to use --merge-alleles with pyfizi.py?'
-        raise KeyError(msg)
+    # flip zscores at SNPs with diff ref allele between GWAS and RefPanel
+    obsZ = pyfizi.flip_alleles(obsZ, sset[GWAS.A1COL], sset[GWAS.A2COL], sset[RefPanel.A1COL], sset[RefPanel.A2COL])
 
     log.debug("Partitioning LD into quadrants")
     Voo_ld = LD[obs].T[obs].T
     Vuo_ld = LD[to_impute].T[obs].T
     Vou_ld = Vuo_ld.T
     Vuu_ld = LD[to_impute].T[to_impute].T
-    if taus is not None and annot is not None:
+
+    if run_fizi:
+        # merge annotations with merged reference snps
+        merged_snps = pd.merge(merged_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=Annot.SNPCOL)
+
+        # this assumes all taus columns are in the annotations
+        # we should perform a sanity check when the program launches...
+        sigma_values = taus[Taus.TAUCOL]
+        annot_names = taus[Taus.NAMECOL].values.flatten()
+        A = merged_snps[annot_names].values
+
+        # this assumes intercept is first...
+        # fine for now but we should fix this...
+        A.T[0] = 1
+        A[np.isnan(A)] = 0
+
+        if gwas_n is None and GWAS.NCOL in gwas:
+            gwas_n = np.median(gwas[GWAS.NCOL])
+
+        D = np.diag(gwas_n * np.dot(A, sigma_values))
         Do = D.T[obs].T[obs]
         Du = D.T[to_impute].T[to_impute]
         uoV = Vuo_ld + mdot([Vuu_ld, Du, Vuo_ld]) + mdot([Vuo_ld, Do, Voo_ld])
@@ -195,9 +173,13 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
         uuV = Vuu_ld
 
     log.debug("Computing inverse of variance-covariance matrix for {} observed SNPs".format(sum(obs)))
-    ooVinv = lin.pinv(ooV)
+    try:
+        ooVinv = lin.inv(ooV, check_finite=False)
+    except lin.LinAlgError:
+        log.debug("Inverse failed. Falling back to psuedo-inverse")
+        ooVinv = lin.pinvh(ooV, check_finite=False)
 
-    log.debug("Imputing {} SNPs from {} observed Zscores".format(sum(to_impute), sum(obs)))
+    log.debug("Imputing {} SNPs from {} observed scores".format(sum(to_impute), sum(obs)))
     # predict the Z-scores
     impZs = mdot([uoV, ooVinv, obsZ])
 

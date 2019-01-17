@@ -49,7 +49,6 @@ class RefPanel(object):
         chroms = self._snp_info[RefPanel.CHRCOL].unique()
 
         if chrom is not None:
-            chrom = self.clean_chrom(chrom)
             if chrom not in chroms:
                 msg = "User supplied chromosome {} is not found in data".format(chrom)
                 log.error(msg)
@@ -97,10 +96,8 @@ class RefPanel(object):
 
         return
 
-    def subset_by_pos(self, chrom, start=None, stop=None, filter_ambig=True):
-        AMBIG = ["AT", "TA", "CG", "GC"]
+    def subset_by_pos(self, chrom, start=None, stop=None, clean_snps=True):
         df = self._snp_info
-        chrom = self.clean_chrom(chrom)
         if start is not None and stop is not None:
             snps = df.loc[(df[RefPanel.CHRCOL] == chrom) & (df[RefPanel.BPCOL] >= start) & (df[RefPanel.BPCOL] <= stop)]
         elif start is not None and stop is None:
@@ -110,18 +107,43 @@ class RefPanel(object):
         else:
             snps = df.loc[(df[RefPanel.CHRCOL] == chrom)]
 
-        if filter_ambig:
-            alleles = snps[RefPanel.A1COL] + snps[RefPanel.A2COL]
-            non_ambig = alleles.apply(lambda y: y.upper() not in AMBIG)
-            snps = snps[non_ambig]
+        if clean_snps:
+            valid = pyfizi.check_valid_snp(snps[RefPanel.A1COL], snps[RefPanel.A2COL])
+            snps = snps.loc[valid].drop_duplicates(subset=pyfizi.RefPanel.SNPCOL)
 
         return RefPanel(snps, self._sample_info, self._geno)
 
     def overlap_gwas(self, gwas):
         df = self._snp_info
+
+        # we need to perform union (outer join) between the GWAS and RefPanel data
         merged_snps = pd.merge(gwas, df, how="outer", left_on=pyfizi.GWAS.SNPCOL, right_on=pyfizi.RefPanel.SNPCOL)
+
+        # how are there duplicates in union?
+        # TODO: double-check if this is necessary
         merged_snps.drop_duplicates(subset=pyfizi.RefPanel.SNPCOL, inplace=True)
-        return merged_snps
+
+        gwas_a1 = merged_snps[pyfizi.GWAS.A1COL]
+        gwas_a2 = merged_snps[pyfizi.GWAS.A2COL]
+        ref_a1 = merged_snps[pyfizi.RefPanel.A1COL]
+        ref_a2 = merged_snps[pyfizi.RefPanel.A2COL]
+
+        # GWAS SNPs must be valid (ie non-ambiguous) alleles
+        valid_gwas = pyfizi.check_valid_snp(gwas_a1, gwas_a2)
+
+        # RefPanel-only SNPs will be NA for GWAS; keep those
+        valid_ref = pd.isna(gwas_a1)
+
+        # Alleles for GWAS SNPs must be valid pairs with RefPanel alleles
+        valid_match = pyfizi.check_valid_alleles(gwas_a1, gwas_a2, ref_a1, ref_a2)
+
+        # Drop GWAS SNPs not found in RefPanel
+        in_ref = ~pd.isna(merged_snps.i)
+
+        # final valid is: valid RefPanel SNPs or non-ambiguous GWAS SNPs that match RefPanel SNPs
+        merged = merged_snps.loc[valid_ref | (valid_gwas & valid_match & in_ref)]
+
+        return merged
 
     def get_geno(self, snps=None):
         with warnings.catch_warnings():
@@ -133,7 +155,7 @@ class RefPanel(object):
 
     @property
     def sample_size(self):
-        return len(self._sample_info)
+        return float(len(self._sample_info))
 
     def estimate_ld(self, snps=None, adjust=0.1, return_eigvals=False):
         G = self.get_geno(snps)
@@ -143,9 +165,9 @@ class RefPanel(object):
         # impute missing with column mean
         inds = np.where(np.isnan(G))
         G[inds] = np.take(col_mean, inds[1])
+        G = (G - np.mean(G, axis=0)) / np.std(G, axis=0)
 
         if return_eigvals:
-            G = (G - np.mean(G, axis=0)) / np.std(G, axis=0)
             _, S, V = lin.svd(G, full_matrices=True)
 
             # adjust 
@@ -155,17 +177,7 @@ class RefPanel(object):
             # same as `mdot([V.T, np.diag(D), V]), D)`
             return np.dot(V.T * D, V), D
         else:
-            return np.corrcoef(G.T) + np.eye(p) * adjust
-
-    def clean_chrom(self, chrom):
-        df = self._snp_info
-        ret_val = None
-        if pd.api.types.is_string_dtype(df[RefPanel.CHRCOL]) or pd.api.types.is_categorical_dtype(df[RefPanel.CHRCOL]):
-            ret_val = str(chrom)
-        else:
-            ret_val = int(chrom)
-
-        return ret_val
+            return (np.dot(G.T, G) / self.sample_size) + (np.eye(p) * adjust)
 
     @classmethod
     def parse_plink(cls, path):

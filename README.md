@@ -26,7 +26,7 @@ Installation
     
 3. Check that FIZI was installed by typing
 
-    `fizi.py --help`
+    `fizi --help`
 
 4. If that did not work, and `--user` was specified, please check that your local user path is included in
 `$PATH` environment variable. `--user` location and can be appended to `$PATH`
@@ -45,6 +45,9 @@ Usage consists of several steps. We outline the general workflow here when the i
 chromosome 1 of our data:
 
 1. Munge/clean _all_ GWAS summary data before imputation
+
+    fizi munge gwas.sumstat.gz --out cleaned.gwas
+
 2. Partitioning cleaned GWAS summary data into chr1 and everything else (loco-chr1).
 3. Run LDSC on locoChr to obtain tau estimates
 4. Perform functionally-informed imputation on chr1 data using tau estimates from loco-chr
@@ -55,8 +58,7 @@ When functional annotations and LDSC estimates are not provided to FIZI, it will
 algorithm described in ref[1]. To impute missing summary statistics using the ImpG algorithm simply enter the
 command 
 
-    fimpy.py cleaned.gwas.sumstat.gz --chr 1 --out imputed.cleaned.gwas.sumstat
-
+    fizi impute cleaned.gwas.sumstat.gz plink_data_path --chr 1 --out imputed.cleaned.gwas.sumstat
 
 Software and support
 -----

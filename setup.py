@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyfizi",
-    version="0.5",
+    version="0.6",
     author="Nicholas Mancuso, Megan Roytman",
     author_email="nick.mancuso@gmail.com, meganroytman@gmail.com",
     description="Impute GWAS summary statistics using reference genotype data",
@@ -13,6 +13,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/bogdanlab/fizi",
     packages=["pyfizi"],
+    python_requires='>=3',
     install_requires=[
         "numpy>=1.14.5",
         "scipy",
@@ -20,10 +21,9 @@ setuptools.setup(
         "pandas-plink",
       ],
     scripts=[
-        "bin/fizi.py",
+        "bin/fizi",
     ],
     classifiers=[
-        "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GPL License",
         "Operating System :: OS Independent",

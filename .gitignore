@@ -1,8 +1,12 @@
 # IDE stuff
 *.idea
 
+# sshfs stuff
+.DS_Store
+
 # FIZI
 *.sumstat
+*.log
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

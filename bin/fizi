@@ -1,10 +1,5 @@
 #!/usr/bin/env python
 
-# This is a modified munge_sumstat.py from LDSC project
-# FIZI needed a similar tool but with a few extra output columns
-# Credit to Brendan Bulik-Sullivan and Hilary Finucane
-
-from __future__ import division
 import argparse
 import bz2
 import gzip
@@ -20,115 +15,6 @@ import pandas as pd
 from scipy.stats import chi2
 
 np.seterr(invalid='ignore')
-
-null_values = {
-    'LOG_ODDS': 0,
-    'BETA': 0,
-    'OR': 1,
-    'Z': 0
-}
-
-default_cnames = {
-    # Chromosome
-    'CHR': 'CHR',
-    'CHROM': 'CHR',
-
-    # BP
-    'BP': 'BP',
-    'POS': 'BP',
-
-    # RS NUMBER
-    'SNP': 'SNP',
-    'MARKERNAME': 'SNP',
-    'SNPID': 'SNP',
-    'RS': 'SNP',
-    'RSID': 'SNP',
-    'RS_NUMBER': 'SNP',
-    'RS_NUMBERS': 'SNP',
-    # NUMBER OF STUDIES
-    'NSTUDY': 'NSTUDY',
-    'N_STUDY': 'NSTUDY',
-    'NSTUDIES': 'NSTUDY',
-    'N_STUDIES': 'NSTUDY',
-    # P-VALUE
-    'P': 'P',
-    'PVALUE': 'P',
-    'P_VALUE':  'P',
-    'PVAL': 'P',
-    'P_VAL': 'P',
-    'GC_PVALUE': 'P',
-    # ALLELE 1
-    'A1': 'A1',
-    'ALLELE1': 'A1',
-    'ALLELE_1': 'A1',
-    'EFFECT_ALLELE': 'A1',
-    'REFERENCE_ALLELE': 'A1',
-    'INC_ALLELE': 'A1',
-    'EA': 'A1',
-    # ALLELE 2
-    'A2': 'A2',
-    'ALLELE2': 'A2',
-    'ALLELE_2': 'A2',
-    'OTHER_ALLELE': 'A2',
-    'NON_EFFECT_ALLELE': 'A2',
-    'DEC_ALLELE': 'A2',
-    'NEA': 'A2',
-    # N
-    'N': 'N',
-    'NCASE': 'N_CAS',
-    'CASES_N': 'N_CAS',
-    'N_CASE': 'N_CAS',
-    'N_CASES': 'N_CAS',
-    'N_CONTROLS': 'N_CON',
-    'N_CAS': 'N_CAS',
-    'N_CON': 'N_CON',
-    'NCONTROL': 'N_CON',
-    'CONTROLS_N': 'N_CON',
-    'N_CONTROL': 'N_CON',
-    'WEIGHT': 'N',  # metal does this. possibly risky.
-    # SIGNED STATISTICS
-    'ZSCORE': 'Z',
-    'Z-SCORE': 'Z',
-    'GC_ZSCORE': 'Z',
-    'Z': 'Z',
-    'OR': 'OR',
-    'B': 'BETA',
-    'BETA': 'BETA',
-    'LOG_ODDS': 'LOG_ODDS',
-    'EFFECTS': 'BETA',
-    'EFFECT': 'BETA',
-    'SIGNED_SUMSTAT': 'SIGNED_SUMSTAT',
-    # INFO
-    'INFO': 'INFO',
-    # MAF
-    'EAF': 'FRQ',
-    'FRQ': 'FRQ',
-    'MAF': 'FRQ',
-    'FRQ_U': 'FRQ',
-    'F_U': 'FRQ',
-}
-
-describe_cname = {
-    'CHR': 'Chromsome',
-    'BP': 'Base position',
-    'SNP': 'Variant ID (e.g., rs number)',
-    'P': 'p-Value',
-    'A1': 'Allele 1, interpreted as ref allele for signed sumstat',
-    'A2': 'Allele 2, interpreted as non-ref allele for signed sumstat',
-    'N': 'Sample size',
-    'N_CAS': 'Number of cases',
-    'N_CON': 'Number of controls',
-    'Z': 'Z-score (0 --> no effect; above 0 --> A1 is trait/risk increasing)',
-    'OR': 'Odds ratio (1 --> no effect; above 1 --> A1 is risk increasing)',
-    'BETA': '[linear/logistic] regression coefficient (0 --> no effect; above 0 --> A1 is trait/risk increasing)',
-    'LOG_ODDS': 'Log odds ratio (0 --> no effect; above 0 --> A1 is risk increasing)',
-    'INFO': 'INFO score (imputation quality; higher --> better imputation)',
-    'FRQ': 'Allele frequency',
-    'SIGNED_SUMSTAT': 'Directional summary statistic as specified by --signed-sumstats',
-    'NSTUDY': 'Number of studies in which the SNP was genotyped'
-}
-
-numeric_cols = ['P', 'N', 'N_CAS', 'N_CON', 'Z', 'OR', 'BETA', 'LOG_ODDS', 'INFO', 'FRQ', 'SIGNED_SUMSTAT', 'NSTUDY']
 
 
 def parse_pos(pos, option):
@@ -189,19 +75,27 @@ def parse_locations(locations, chrom=None, start_bp=None, stop_bp=None):
 
 def get_command_string(args):
     """
-    Format pyfizi call and options into a string for logging/printing
+    Format fizi call and options into a string for logging/printing
     """
-    base = "fizi.py " + " ".join(args[:2]) + os.linesep
-    rest = args[2:]
+    base = "fizi {}{}".format(args[0], os.linesep)
+    rest = args[1:]
     rest_strs = []
+    needs_tab = True
     for cmd in rest:
-        if "--" in cmd:
-            if cmd in ["--quiet", "--verbose", "--force-non-negative"]:
+        if "-" == cmd[0]:
+            if cmd in ["--quiet", "-q", "--verbose", "-v", "--force-non-negative"]:
                 rest_strs.append("\t{}".format(cmd) + os.linesep)
+                needs_tab = True
             else:
                 rest_strs.append("\t{}".format(cmd))
+                needs_tab = False
         else:
-            rest_strs.append(" " + cmd + os.linesep)
+            if needs_tab:
+                rest_strs.append("\t{}{}".format(cmd, os.linesep))
+                needs_tab = True
+            else:
+                rest_strs.append(" {}{}".format(cmd, os.linesep))
+                needs_tab = True
 
     return base + "".join(rest_strs) + os.linesep
 
@@ -225,10 +119,11 @@ def get_cname_map(flag, default, ignore):
     are cleaned. But all equality is modulo clean_header().
 
     """
-    clean_ignore = [clean_header(x) for x in ignore]
+    clean_ignore = {clean_header(x) for x in ignore}
+    both = clean_ignore | set(flag)
     cname_map = {x: flag[x] for x in flag if x not in clean_ignore}
-    cname_map.update(
-        {x: default[x] for x in default if x not in clean_ignore + flag.keys()})
+    cname_map.update({x: default[x] for x in default if x not in both})
+
     return cname_map
 
 
@@ -238,10 +133,10 @@ def get_compression(fh):
     """
     if fh.endswith('gz'):
         compression = 'gzip'
-        openfunc = gzip.open
+        openfunc = lambda x: gzip.open(x, "rt")
     elif fh.endswith('bz2'):
         compression = 'bz2'
-        openfunc = bz2.BZ2File
+        openfunc = lambda x: bz2.open(x, "rt")
     else:
         openfunc = open
         compression = None
@@ -263,25 +158,25 @@ def clean_header(header):
 def filter_pvals(pvals, log):
     """Remove out-of-bounds P-values"""
 
-    ii = (pvals > 0) & (pvals <= 1)
+    ii = (pvals >= 0) & (pvals <= 1)
     bad_p = (~ii).sum()
     if bad_p > 0:
-        msg = '{N} SNPs had P outside of (0,1]. The P column may be mislabeled'
+        msg = '{N} SNPs had P outside of [0,1]. The P column may be mislabeled'
         log.warning(msg.format(N=bad_p))
 
     return ii
 
 
-def filter_info(info, log, args):
-    """Remove INFO < args.info_min (default 0.9) and complain about out-of-bounds INFO."""
+def filter_info(info, log, info_min):
+    """Remove INFO < info_min (default 0.9) and complain about out-of-bounds INFO."""
 
     if type(info) is pd.Series:  # one INFO column
         jj = ((info > 2.0) | (info < 0)) & info.notnull()
-        ii = info >= args.info_min
+        ii = info >= info_min
     elif type(info) is pd.DataFrame:  # several INFO columns
         jj = (((info > 2.0) & info.notnull()).any(axis=1) | (
             (info < 0) & info.notnull()).any(axis=1))
-        ii = (info.sum(axis=1) >= args.info_min * (len(info.columns)))
+        ii = (info.sum(axis=1) >= info_min * (len(info.columns)))
     else:
         raise ValueError('Expected pd.DataFrame or pd.Series.')
 
@@ -293,9 +188,9 @@ def filter_info(info, log, args):
     return ii
 
 
-def filter_frq(frq, log, args):
+def filter_frq(frq, log, maf_min):
     """
-    Filter on MAF. Remove MAF < args.maf_min and out-of-bounds MAF.
+    Filter on MAF. Remove MAF < maf_min and out-of-bounds MAF.
     """
     jj = (frq < 0) | (frq > 1)
     bad_frq = jj.sum()
@@ -304,60 +199,46 @@ def filter_frq(frq, log, args):
         log.warning(msg.format(N=bad_frq))
 
     frq = np.minimum(frq, 1 - frq)
-    ii = frq > args.maf_min
+    ii = frq > maf_min
     return ii & ~jj
 
 
-def filter_alleles(a):
-    """Remove alleles that do not describe strand-unambiguous SNPs"""
-    return a.isin(pyfizi.VALID_SNPS)
-
-
-def parse_dat(dat_gen, convert_colname, merge_alleles, log, args):
+def parse_dat(dat_gen, convert_colname, log, args):
     """Parse and filter a sumstats file chunk-wise"""
 
     tot_snps = 0
     dat_list = []
     msg = 'Reading sumstats from {F} into memory {N} SNPs at a time'
     log.info(msg.format(F=args.sumstats, N=int(args.chunksize)))
-    drops = {'NA': 0, 'P': 0, 'INFO': 0,
-             'FRQ': 0, 'A': 0, 'SNP': 0, 'MERGE': 0}
+    drops = {'NA': 0, 'P': 0, 'INFO': 0, 'FRQ': 0, 'A': 0, 'SNP': 0}
+    numeric_cols = ['P', 'N', 'N_CAS', 'N_CON', 'Z', 'OR', 'BETA', 'LOG_ODDS', 'INFO', 'FRQ', 'SIGNED_SUMSTAT', 'NSTUDY']
+
     for block_num, dat in enumerate(dat_gen):
         log.info('Reading SNP chunk {}'.format(block_num + 1))
         tot_snps += len(dat)
         old = len(dat)
-        
+
         for c in dat.columns:
             # sometimes column types change when streaming the data
             if c in numeric_cols and not np.issubdtype(dat[c].dtype, np.number):
                 log.warning('Column {} expected to be numeric. Attempting to convert'.format(c))
                 dat[c] = pd.to_numeric(dat[c], errors="coerce")
 
-        dat = dat.dropna(axis=0, how="any", subset=filter(
-            lambda x: x != 'INFO', dat.columns)).reset_index(drop=True)
+        dat = dat.dropna(axis=0, how="any", subset=filter(lambda x: x != 'INFO', dat.columns)).reset_index(drop=True)
         drops['NA'] += old - len(dat)
         dat.columns = map(lambda x: convert_colname[x], dat.columns)
 
         ii = np.ones(len(dat), dtype=bool)
-        if args.merge_alleles:
-            old = ii.sum()
-            ii = dat.SNP.isin(merge_alleles.SNP)
-            drops['MERGE'] += old - ii.sum()
-            if ii.sum() == 0:
-                continue
-
-            dat = dat[ii].reset_index(drop=True)
-            ii = np.ones(len(dat), dtype=bool)
 
         if 'INFO' in dat.columns:
             old = ii.sum()
-            ii &= filter_info(dat['INFO'], log, args)
+            ii &= filter_info(dat['INFO'], log, args.info_min)
             new = ii.sum()
             drops['INFO'] += old - new
 
         if 'FRQ' in dat.columns:
             old = ii.sum()
-            ii &= filter_frq(dat['FRQ'], log, args)
+            ii &= filter_frq(dat['FRQ'], log, args.maf_min)
             new = ii.sum()
             drops['FRQ'] += old - new
 
@@ -372,13 +253,6 @@ def parse_dat(dat_gen, convert_colname, merge_alleles, log, args):
         ii &= filter_pvals(dat.P, log)
         new = ii.sum()
         drops['P'] += old - new
-        old = new
-        if not args.no_alleles:
-            dat.A1 = dat.A1.str.upper()
-            dat.A2 = dat.A2.str.upper()
-            ii &= filter_alleles(dat.A1 + dat.A2)
-            new = ii.sum()
-            drops['A'] += old - new
 
         if ii.sum() == 0:
             continue
@@ -388,14 +262,10 @@ def parse_dat(dat_gen, convert_colname, merge_alleles, log, args):
     log.info('Done reading SNP chunks')
     dat = pd.concat(dat_list, axis=0).reset_index(drop=True)
     log.info('Read {N} SNPs from --sumstats file'.format(N=tot_snps))
-    if args.merge_alleles:
-        log.info('Removed {N} SNPs not in --merge-alleles'.format(N=drops['MERGE']))
-
     log.info('Removed {N} SNPs with missing values'.format(N=drops['NA']))
     log.info('Removed {N} SNPs with INFO <= {I}'.format(N=drops['INFO'], I=args.info_min))
     log.info('Removed {N} SNPs with MAF <= {M}'.format(N=drops['FRQ'], M=args.maf_min))
     log.info('Removed {N} SNPs with out-of-bounds p-values'.format(N=drops['P']))
-    log.info('Removed {N} variants that were not SNPs or were strand-ambiguous'.format(N=drops['A']))
     log.info('{N} SNPs remain'.format(N=len(dat)))
 
     return dat
@@ -443,7 +313,7 @@ def process_n(dat, args, log):
 
 
 def p_to_z(pvals):
-    """Convert P-value and N to standardized beta."""
+    """Convert P-value to Z-score"""
     return np.sqrt(chi2.isf(pvals, 1))
 
 
@@ -492,40 +362,123 @@ def parse_flag_cnames(args):
     return [flag_cnames, null_value]
 
 
-def allele_merge(dat, alleles, log):
-    """
-    WARNING: dat now contains a bunch of NA's~
-    Note: dat now has the same SNPs in the same order as --merge alleles.
-    """
-    dat = pd.merge(dat, alleles, how='left', on='SNP', sort=False).reset_index(drop=True)
-    ii = dat.A1.notnull()
-    a1234 = dat.A1[ii] + dat.A2[ii] + dat.MA[ii]
-    match = a1234.apply(lambda y: y in pyfizi.MATCH_ALLELES)
-    jj = pd.Series(np.zeros(len(dat), dtype=bool))
-    jj[ii] = match        # This breaks the dtype sometimes
-    jj = jj.astype(bool)  # Enforce bool dtype
-    old = ii.sum()
-    n_mismatch = (~match).sum()
-    if n_mismatch < old:
-        N = old - n_mismatch
-        log.info(
-            'Removed {M} SNPs whose alleles did not match --merge-alleles ({N} SNPs remain).'.format(M=n_mismatch, N=N))
-    else:
-        raise ValueError('All SNPs have alleles that do not match --merge-alleles.')
-
-    dat.loc[~jj, [i for i in dat.columns if i != 'SNP']] = float('nan')
-    dat.drop(['MA'], axis=1, inplace=True)
-    return dat
-
-
 def munge(args):
+    # This is a modified munge_sumstat.py from LDSC project
+    # FIZI needed a similar tool but with a few extra output columns
+    # Credit to Brendan Bulik-Sullivan and Hilary Finucane
+
     log = logging.getLogger(pyfizi.LOG)
+
+    null_values = {
+        'LOG_ODDS': 0,
+        'BETA': 0,
+        'OR': 1,
+        'Z': 0
+    }
+
+    default_cnames = {
+        # Chromosome
+        'CHR': 'CHR',
+        'CHROM': 'CHR',
+
+        # BP
+        'BP': 'BP',
+        'POS': 'BP',
+
+        # RS NUMBER
+        'SNP': 'SNP',
+        'MARKERNAME': 'SNP',
+        'SNPID': 'SNP',
+        'RS': 'SNP',
+        'RSID': 'SNP',
+        'RS_NUMBER': 'SNP',
+        'RS_NUMBERS': 'SNP',
+        # NUMBER OF STUDIES
+        'NSTUDY': 'NSTUDY',
+        'N_STUDY': 'NSTUDY',
+        'NSTUDIES': 'NSTUDY',
+        'N_STUDIES': 'NSTUDY',
+        # P-VALUE
+        'P': 'P',
+        'PVALUE': 'P',
+        'P_VALUE':  'P',
+        'PVAL': 'P',
+        'P_VAL': 'P',
+        'GC_PVALUE': 'P',
+        # ALLELE 1
+        'A1': 'A1',
+        'ALLELE1': 'A1',
+        'ALLELE_1': 'A1',
+        'EFFECT_ALLELE': 'A1',
+        'REFERENCE_ALLELE': 'A1',
+        'INC_ALLELE': 'A1',
+        'EA': 'A1',
+        # ALLELE 2
+        'A2': 'A2',
+        'ALLELE2': 'A2',
+        'ALLELE_2': 'A2',
+        'OTHER_ALLELE': 'A2',
+        'NON_EFFECT_ALLELE': 'A2',
+        'DEC_ALLELE': 'A2',
+        'NEA': 'A2',
+        # N
+        'N': 'N',
+        'NCASE': 'N_CAS',
+        'CASES_N': 'N_CAS',
+        'N_CASE': 'N_CAS',
+        'N_CASES': 'N_CAS',
+        'N_CONTROLS': 'N_CON',
+        'N_CAS': 'N_CAS',
+        'N_CON': 'N_CON',
+        'NCONTROL': 'N_CON',
+        'CONTROLS_N': 'N_CON',
+        'N_CONTROL': 'N_CON',
+        'WEIGHT': 'N',  # metal does this. possibly risky.
+        # SIGNED STATISTICS
+        'ZSCORE': 'Z',
+        'Z-SCORE': 'Z',
+        'GC_ZSCORE': 'Z',
+        'Z': 'Z',
+        'OR': 'OR',
+        'B': 'BETA',
+        'BETA': 'BETA',
+        'LOG_ODDS': 'LOG_ODDS',
+        'EFFECTS': 'BETA',
+        'EFFECT': 'BETA',
+        'SIGNED_SUMSTAT': 'SIGNED_SUMSTAT',
+        # INFO
+        'INFO': 'INFO',
+        # MAF
+        'EAF': 'FRQ',
+        'FRQ': 'FRQ',
+        'MAF': 'FRQ',
+        'FRQ_U': 'FRQ',
+        'F_U': 'FRQ',
+    }
+
+    describe_cname = {
+        'CHR': 'Chromsome',
+        'BP': 'Base position',
+        'SNP': 'Variant ID (e.g., rs number)',
+        'P': 'p-Value',
+        'A1': 'Allele 1, interpreted as ref allele for signed sumstat',
+        'A2': 'Allele 2, interpreted as non-ref allele for signed sumstat',
+        'N': 'Sample size',
+        'N_CAS': 'Number of cases',
+        'N_CON': 'Number of controls',
+        'Z': 'Z-score (0 --> no effect; above 0 --> A1 is trait/risk increasing)',
+        'OR': 'Odds ratio (1 --> no effect; above 1 --> A1 is risk increasing)',
+        'BETA': '[linear/logistic] regression coefficient (0 --> no effect; above 0 --> A1 is trait/risk increasing)',
+        'LOG_ODDS': 'Log odds ratio (0 --> no effect; above 0 --> A1 is risk increasing)',
+        'INFO': 'INFO score (imputation quality; higher --> better imputation)',
+        'FRQ': 'Allele frequency',
+        'SIGNED_SUMSTAT': 'Directional summary statistic as specified by --signed-sumstats',
+        'NSTUDY': 'Number of studies in which the SNP was genotyped'
+    }
+
     try:
         if args.sumstats is None:
             raise ValueError('The --sumstats flag is required')
-        if args.no_alleles and args.merge_alleles:
-            raise ValueError(
-                '--no-alleles and --merge-alleles are not compatible')
         if args.daner and args.daner_n:
             raise ValueError('--daner and --daner-n are not compatible. Use --daner for sample ' +
                              'size from FRQ_A/FRQ_U headers, use --daner-n for values from Nca/Nco columns')
@@ -554,8 +507,8 @@ def munge(args):
             args.N_cas = N_cas
             args.N_con = N_con
             # drop any N, N_cas, N_con or FRQ columns
-            for c in ['N', 'N_CAS', 'N_CON', 'FRQ']:  # c isn't used!?!?
-                for d in [x for x in cname_map if cname_map[x] == 'c']:
+            for c in ['N', 'N_CAS', 'N_CON', 'FRQ']:
+                for d in [x for x in cname_map if cname_map[x] == c]:
                     del cname_map[d]
 
             cname_map[frq_u] = 'FRQ'
@@ -598,9 +551,9 @@ def munge(args):
 
         # check that we have all the columns we need
         if not args.a1_inc:
-            req_cols = ['SNP', 'P', 'SIGNED_SUMSTAT']
+            req_cols = ['CHR', 'SNP', 'P', 'SIGNED_SUMSTAT']
         else:
-            req_cols = ['SNP', 'P']
+            req_cols = ['CHR', 'SNP', 'P']
 
         for c in req_cols:
             if c not in cname_translation.values():
@@ -612,109 +565,92 @@ def munge(args):
             if numk > 1:
                 raise ValueError('Found {num} columns named {C}'.format(C=field, num=str(numk)))
     
-            # check multiple different column names don't map to same data field
-            for head in cname_translation.values():
-                numc = cname_translation.values().count(head)
-                if numc > 1:
-                    raise ValueError('Found {num} different {C} columns'.format(C=head, num=str(numc)))
-    
-            if (not args.N) and (not (args.N_cas and args.N_con)) and ('N' not in cname_translation.values()) and\
-                    (any(x not in cname_translation.values() for x in ['N_CAS', 'N_CON'])):
-                raise ValueError('Could not determine N.')
-            if ('N' in cname_translation.values() or all(x in cname_translation.values() for x in ['N_CAS', 'N_CON']))\
-                    and 'NSTUDY' in cname_translation.values():
-                nstudy = [
-                    x for x in cname_translation if cname_translation[x] == 'NSTUDY']
-                for x in nstudy:
-                    del cname_translation[x]
-            if not args.no_alleles and not all(x in cname_translation.values() for x in ['A1', 'A2']):
-                raise ValueError('Could not find A1/A2 columns.')
-    
-            log.info('Interpreting column names as follows:')
-            for x in cname_description:
-                log.info(x + ': ' + cname_description[x])
-    
-            if args.merge_alleles:
-                log.info(
-                    'Reading list of SNPs for allele merge from {F}'.format(F=args.merge_alleles))
-                _, compression = get_compression(args.merge_alleles)
-                merge_alleles = pd.read_csv(args.merge_alleles, compression=compression, header=0,
-                                            delim_whitespace=True, na_values='.')
-                if any(x not in merge_alleles.columns for x in ["SNP", "A1", "A2"]):
-                    raise ValueError(
-                        '--merge-alleles must have columns SNP, A1, A2.')
-    
-                log.info(
-                    'Read {N} SNPs for allele merge.'.format(N=len(merge_alleles)))
-                merge_alleles['MA'] = (
-                    merge_alleles.A1 + merge_alleles.A2).apply(lambda y: y.upper())
-                merge_alleles.drop(
-                    [x for x in merge_alleles.columns if x not in ['SNP', 'MA']], axis=1, inplace=True)
+        # check multiple different column names don't map to same data field
+        check = set([])
+        for head in cname_translation.values():
+            if head in check:
+                raise ValueError('Found multiple {C} columns'.format(C=head))
             else:
-                merge_alleles = None
-    
-            _, compression = get_compression(args.sumstats)
-    
-            # figure out which columns are going to involve sign information, so we can ensure
-            # they're read as floats
-            signed_sumstat_cols = [k for k, v in cname_translation.items() if v == 'SIGNED_SUMSTAT']
-            dat_gen = pd.read_csv(args.sumstats, delim_whitespace=True, header=0,
-                                  compression=compression, usecols=cname_translation.keys(),
-                                  na_values=['.', 'NA'], iterator=True, chunksize=args.chunksize,
-                                  dtype={c: np.float64 for c in signed_sumstat_cols})
-    
-            dat = parse_dat(dat_gen, cname_translation, merge_alleles, log, args)
-            if len(dat) == 0:
-                raise ValueError('After applying filters, no SNPs remain.')
-    
-            old = len(dat)
-            dat = dat.drop_duplicates(subset='SNP').reset_index(drop=True)
-            new = len(dat)
-            log.info('Removed {M} SNPs with duplicated rs numbers ({N} SNPs remain).'.format(M=old - new, N=new))
-            # filtering on N cannot be done chunkwise
-            dat = process_n(dat, args, log)
-            dat.P = p_to_z(dat.P)
-            dat.rename(columns={'P': 'Z'}, inplace=True)
-            if not args.a1_inc:
-                m = np.median(dat.SIGNED_SUMSTAT)
-                if not pass_median_check(m, signed_sumstat_null, 0.1):
-                    msg = 'Median value of {F} is {V} (should be close to {M}). This column may be mislabeled.'
-                    raise ValueError(msg.format(F=sign_cname, M=signed_sumstat_null, V=round(m, 2)))
-                else:
-                    msg = 'Median value of {F} was {C}, which seems sensible.'.format(C=m, F=sign_cname)
-                    log.info(msg)
-    
-                dat.Z *= (-1) ** (dat.SIGNED_SUMSTAT < signed_sumstat_null)
-                dat.drop('SIGNED_SUMSTAT', inplace=True, axis=1)
-    
-            # do this last so we don't have to worry about NA values in the rest of
-            # the program
-            if args.merge_alleles:
-                dat = allele_merge(dat, merge_alleles, log)
-    
-            out_fname = args.output + '.sumstats.gz'
-            print_colnames = [
-                c for c in dat.columns if c in ['CHR', 'BP', 'SNP', 'N', 'Z', 'A1', 'A2']]
-            if args.keep_maf and 'FRQ' in dat.columns:
-                print_colnames.append('FRQ')
-            msg = 'Writing summary statistics for {M} SNPs ({N} with nonmissing beta) to {F}.'
-            log.info(
-                msg.format(M=len(dat), F=out_fname, N=dat.N.notnull().sum()))
-    
-            dat.to_csv(
-                out_fname, sep="\t", index=False, columns=print_colnames, float_format='%.3f', compression="gzip")
-    
-            CHISQ = (dat.Z ** 2)
-            mean_chisq = CHISQ.mean()
-    
-            log.info('METADATA - Mean chi^2 = ' + str(round(mean_chisq, 3)))
-            if mean_chisq < 1.02:
-                log.warning("METADATA: Mean chi^2 may be too small")
-    
-            log.info('METADATA - Lambda GC = ' + str(round(CHISQ.median() / 0.4549, 3)))
-            log.info('METADATA - Max chi^2 = ' + str(round(CHISQ.max(), 3)))
-            log.info(
-                'METADATA - {N} Genome-wide significant SNPs (some may have been removed by filtering)'.format(N=(CHISQ > 29).sum()))
+                check.add(head)
+
+        if (not args.N) and (not (args.N_cas and args.N_con)) and ('N' not in cname_translation.values()) and\
+                (any(x not in cname_translation.values() for x in ['N_CAS', 'N_CON'])):
+            raise ValueError('Could not determine N.')
+        if ('N' in cname_translation.values() or all(x in cname_translation.values() for x in ['N_CAS', 'N_CON']))\
+                and 'NSTUDY' in cname_translation.values():
+            nstudy = [
+                x for x in cname_translation if cname_translation[x] == 'NSTUDY']
+            for x in nstudy:
+                del cname_translation[x]
+        if not all(x in cname_translation.values() for x in ['A1', 'A2']):
+            raise ValueError('Could not find A1/A2 columns.')
+
+        log.info('Interpreting column names as follows:')
+        for x in cname_description:
+            log.info(x + ': ' + cname_description[x])
+
+        _, compression = get_compression(args.sumstats)
+
+        # figure out which columns are going to involve sign information, so we can ensure
+        # they're read as floats
+        signed_sumstat_cols = [k for k, v in cname_translation.items() if v == 'SIGNED_SUMSTAT']
+        dtypes = {c: np.float64 for c in signed_sumstat_cols}
+        dtypes['CHR'] = "category"
+        dat_gen = pd.read_csv(args.sumstats, delim_whitespace=True, header=0,
+                              compression=compression, usecols=cname_translation.keys(),
+                              na_values=['.', 'NA'], iterator=True, chunksize=args.chunksize,
+                              dtype=dtypes)
+
+        dat = parse_dat(dat_gen, cname_translation, log, args)
+        if len(dat) == 0:
+            raise ValueError('After applying filters, no SNPs remain.')
+
+        old = len(dat)
+        dat = dat.drop_duplicates(subset='SNP').reset_index(drop=True)
+        new = len(dat)
+        log.info('Removed {M} SNPs with duplicated rs numbers ({N} SNPs remain).'.format(M=old - new, N=new))
+        # filtering on N cannot be done chunkwise
+        dat = process_n(dat, args, log)
+        dat.P = p_to_z(dat.P)
+        dat.rename(columns={'P': 'Z'}, inplace=True)
+        if not args.a1_inc:
+            m = np.median(dat.SIGNED_SUMSTAT)
+            if not pass_median_check(m, signed_sumstat_null, 0.1):
+                msg = 'Median value of {F} is {V} (should be close to {M}). This column may be mislabeled.'
+                raise ValueError(msg.format(F=sign_cname, M=signed_sumstat_null, V=round(m, 2)))
+            else:
+                msg = 'Median value of {F} was {C}, which seems sensible.'.format(C=m, F=sign_cname)
+                log.info(msg)
+
+            dat.Z *= (-1) ** (dat.SIGNED_SUMSTAT < signed_sumstat_null)
+            dat.drop('SIGNED_SUMSTAT', inplace=True, axis=1)
+
+        out_fname = args.output + '.sumstats.gz'
+        print_colnames = []
+        for c in ['CHR', 'SNP', 'BP', 'A1', 'A2', 'FRQ', 'Z', 'N']:
+            if c in dat.columns:
+                if c == 'FRQ' and not args.keep_maf:
+                    continue
+
+                print_colnames.append(c)
+
+        msg = 'Writing summary statistics for {M} SNPs ({N} with nonmissing beta) to {F}.'
+        log.info(
+            msg.format(M=len(dat), F=out_fname, N=dat.N.notnull().sum()))
+
+        dat.to_csv(
+            out_fname, sep="\t", index=False, columns=print_colnames, float_format='%.3f', compression="gzip")
+
+        CHISQ = (dat.Z ** 2)
+        mean_chisq = CHISQ.mean()
+
+        log.info('METADATA - Mean chi^2 = ' + str(round(mean_chisq, 3)))
+        if mean_chisq < 1.02:
+            log.warning("METADATA: Mean chi^2 may be too small")
+
+        log.info('METADATA - Lambda GC = ' + str(round(CHISQ.median() / 0.4549, 3)))
+        log.info('METADATA - Max chi^2 = ' + str(round(CHISQ.max(), 3)))
+        log.info('METADATA - {N} Genome-wide significant SNPs (some may have been removed by filtering)'.format(N=(CHISQ > 29).sum()))
 
     except Exception as err:
         log.error(err)
@@ -765,12 +701,23 @@ def impute(args):
         log.info("Preparing GWAS summary file")
         gwas = pyfizi.GWAS.parse_gwas(args.gwas)
 
+        # filter GWAS down to chromosome if it is specified here to save later on
+        if chrom is not None:
+            gwas = gwas.subset_by_pos(chrom, start_bp, stop_bp)
+
         # load reference genotype data
         log.info("Preparing reference SNP data")
         ref = pyfizi.RefPanel.parse_plink(args.ref)
 
         # load functional annotations and taus
-        if args.annot is not None and args.taus is not None:
+        # parity check for functional data
+        if args.annot is not None and args.taus is None:
+            raise ValueError("Annotation requires corresponding LDSC escimates (--taus) file")
+        if args.annot is None and args.taus is not None:
+            raise ValueError("LDSC estimates require corresponding annotation (--annot) file")
+
+        run_fizi = args.annot is not None and args.taus is not None
+        if run_fizi:
             log.info("Preparing annotation file")
             annot = pyfizi.Annot.parse_annot(args.annot)
             log.info("Preparing SNP effect-size variance file")
@@ -786,12 +733,6 @@ def impute(args):
                 if cn not in annot_cnames:
                     raise KeyError("Prior variance for {} not found in annotation file".format(cn))
 
-        # parity check for functional data
-        if args.annot is not None and args.taus is None:
-            raise ValueError("Annotation requires corresponding LDSC escimates (--taus) file")
-        if args.annot is None and args.taus is not None:
-            raise ValueError("LDSC estimates requires corresponding annotation (--annot) file")
-
         log.info("Starting summary statistics imputation with window size {} and buffer size {}".format(window_size, buffer_size))
         written = False
         with open("{}.sumstat".format(args.output), "w") as output:
@@ -802,8 +743,7 @@ def impute(args):
             else:
                 partitions = ref.get_partitions(window_size, chrom, start_bp, stop_bp)
 
-            for idx, partition in enumerate(partitions):
-                chrom, start, stop = partition
+            for chrom, start, stop in partitions:
                 pstart = max(1, start - buffer_size)
                 pstop = stop + buffer_size
 
@@ -822,28 +762,24 @@ def impute(args):
                     written = True
                     continue
 
-                # should we just fall back to IMPG when no annotations overlap?
-                if args.annot is not None and args.taus is not None:
+                if run_fizi:
                     log.debug("Subsetting annotation data by {}:{} - {}:{}".format(chrom, int(pstart), chrom, int(pstop)))
                     part_annot = annot.subset_by_pos(chrom, pstart, pstop)
                     if len(part_annot) == 0:
                         log.warning("No annotations found at {}:{} - {}:{}. Defaulting to ImpG".format(chrom, int(pstart), chrom, int(pstop)))
                         imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref, prop=min_prop, start=start, stop=stop,
                                                         ridge=args.ridge_term)
-                        pyfizi.write_output(imputed_gwas, output, append=written)
-                        written = True
-                        continue
-
-                # impute GWAS data for this partition
-                if args.annot is not None and args.taus is not None:
-                    imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref, annot=part_annot, taus=taus,
-                                                    prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
+                    else:
+                        imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref, annot=part_annot, taus=taus,
+                                                          prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
                 else:
                     imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref,
                                                     prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
 
-                pyfizi.write_output(imputed_gwas, output, append=written)
-                written = True
+                # format floats to only use 3 decimal places
+                with pd.option_context('display.float_format', '${:.3}'.format):
+                    pyfizi.write_output(imputed_gwas, output, append=written)
+                    written = True
 
     except Exception as err:
         log.error(err)
@@ -853,13 +789,14 @@ def impute(args):
     return 0
 
 
-# set p = False for testing in order to prevent printing
 def main(argsv):
     # setup main parser
     argp = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # add subparser for the  munge summary statistics program
-    subp = argp.add_subparsers(help="Subcommands: munge to clean up summary statistics. impute to perform imputation.")
+    subp = argp.add_subparsers(title="Subcommands",
+                               help="'munge' to clean up summary statistics. 'impute' to perform imputation.")
+
     munp = subp.add_parser("munge",
                            description="Munge summary statistics input to conform to FIZI requirements")
 
@@ -886,9 +823,6 @@ def main(argsv):
     munp.add_argument('--daner-n', default=False, action='store_true',
                       help="Use this flag to parse more recent daner* formatted files, which "
                            "include sample size column 'Nca' and 'Nco'.")
-    munp.add_argument('--no-alleles', default=False, action="store_true",
-                      help="Don't require alleles. Useful if only unsigned summary statistics are available "
-                           "and the goal is h2 / partitioned h2 estimation rather than rg estimation.")
     munp.add_argument('--merge-alleles', default=None, type=str,
                       help="Same as --merge, except the file should have three columns: SNP, A1, A2, "
                            "and all alleles will be matched to the --merge-alleles file alleles.")
@@ -899,29 +833,29 @@ def main(argsv):
 
     # optional args to specify column names
     munp.add_argument('--snp', default=None, type=str,
-                      help='Name of SNP column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of SNP column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--N-col', default=None, type=str,
-                      help='Name of N column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of N column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--N-cas-col', default=None, type=str,
-                      help='Name of N column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of N column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--N-con-col', default=None, type=str,
-                      help='Name of N column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of N column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--a1', default=None, type=str,
-                      help='Name of A1 column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of A1 column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--a2', default=None, type=str,
-                      help='Name of A2 column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of A2 column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--p', default=None, type=str,
-                      help='Name of p-value column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of p-value column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--frq', default=None, type=str,
-                      help='Name of FRQ or MAF column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of FRQ or MAF column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--signed-sumstats', default=None, type=str,
                       help='Name of signed sumstat column, comma null value (e.g., Z,0 or OR,1). NB: case insensitive.')
     munp.add_argument('--info', default=None, type=str,
-                      help='Name of INFO column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of INFO column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--info-list', default=None, type=str,
                       help='Comma-separated list of INFO columns. Will filter on the mean. NB: case insensitive.')
     munp.add_argument('--nstudy', default=None, type=str,
-                      help='Name of NSTUDY column (if not a name that pyfizi understands). NB: case insensitive.')
+                      help='Name of NSTUDY column (if not a name that FIZI understands). NB: case insensitive.')
     munp.add_argument('--nstudy-min', default=None, type=float,
                       help='Minimum # of studies. Default is to remove everything below the max, unless there is an N column,'
                            ' in which case do nothing.')
@@ -935,7 +869,7 @@ def main(argsv):
     # misc options
     munp.add_argument("-q", "--quiet", default=False, action="store_true",
                       help="Do not print anything to stdout.")
-    munp.add_argument("--verbose", default=False, action="store_true",
+    munp.add_argument("-v", "--verbose", default=False, action="store_true",
                       help="Verbose logging. Includes debug info.")
     munp.add_argument("-o", "--output", default="FIZI",
                       help="Prefix for output data.")
@@ -988,7 +922,7 @@ def main(argsv):
     # misc options
     impp.add_argument("-q", "--quiet", default=False, action="store_true",
                       help="Do not print anything to stdout.")
-    impp.add_argument("--verbose", default=False, action="store_true",
+    impp.add_argument("-v", "--verbose", default=False, action="store_true",
                       help="Verbose logging. Includes debug info.")
     impp.add_argument("-o", "--output", default="FIZI",
                       help="Prefix for output data.")
@@ -998,6 +932,12 @@ def main(argsv):
 
     # parse arguments
     args = argp.parse_args(argsv)
+
+    # hack to check that at least one sub-command was selected in 3.6
+    # 3.7 -might- have fixed this bug
+    if not hasattr(args, "func"):
+        argp.print_help()
+        return 2  # command-line error
 
     cmd_str = get_command_string(argsv)
 
@@ -1009,7 +949,7 @@ def main(argsv):
     FORMAT = "[%(asctime)s - %(levelname)s] %(message)s"
     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
     log = logging.getLogger(pyfizi.LOG)
-    log.setLevel(logging.INFO)
+    log.setLevel(logging.INFO if not args.verbose else logging.DEBUG)
     fmt = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
 
     # write to stdout unless quiet is set

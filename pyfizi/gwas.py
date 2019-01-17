@@ -50,12 +50,7 @@ class GWAS(pd.DataFrame):
     def _constructor_sliced(self):
         return pyfizi.GWASSeries
 
-    def subset_by_pos(self, chrom, start, stop):
-        if pd.api.types.is_string_dtype(self[GWAS.CHRCOL]) or pd.api.types.is_categorical_dtype(self[GWAS.CHRCOL]):
-            chrom = str(chrom)
-        else:
-            chrom = int(chrom)
-
+    def subset_by_pos(self, chrom, start=None, stop=None):
         if start is not None and stop is not None:
             snps = self.loc[(self[GWAS.CHRCOL] == chrom) & (self[GWAS.BPCOL] >= start) & (self[GWAS.BPCOL] <= stop)]
         elif start is not None and stop is None:
@@ -69,7 +64,7 @@ class GWAS(pd.DataFrame):
 
     @classmethod
     def parse_gwas(cls, stream):
-        dtype_dict = {'SNP': str, 'Z': float, 'N': float, 'A1': str, 'A2': str}
+        dtype_dict = {'CHR': "category", 'SNP': str, 'Z': float, 'N': float, 'A1': str, 'A2': str}
         cmpr = pyfizi.get_compression(stream)
         df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
         for column in GWAS.REQ_COLS:
