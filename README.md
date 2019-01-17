@@ -46,7 +46,7 @@ chromosome 1 of our data:
 
 1. Munge/clean _all_ GWAS summary data before imputation
 
-    fizi munge gwas.sumstat.gz --out cleaned.gwas
+    `fizi munge gwas.sumstat.gz --out cleaned.gwas`
 
 2. Partitioning cleaned GWAS summary data into chr1 and everything else (loco-chr1).
 3. Run LDSC on locoChr to obtain tau estimates
