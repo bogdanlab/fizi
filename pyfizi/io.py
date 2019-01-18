@@ -45,5 +45,7 @@ def write_output(imputed_gwas, output, append=False):
 
     :return: None
     """
-    imputed_gwas.to_csv(output, sep="\t", mode="a" if append else "w", header=not append, index=False)
+    with pd.option_context('display.float_format', '{:.3}'.format):
+        imputed_gwas.to_csv(output, sep="\t", mode="a" if append else "w", header=not append, index=False)
+
     return

@@ -796,9 +796,8 @@ def impute(args):
                                                     prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
 
                 # format floats to only use 3 decimal places
-                with pd.option_context('display.float_format', '{:.3}'.format):
-                    pyfizi.write_output(imputed_gwas, output, append=written)
-                    written = True
+                pyfizi.write_output(imputed_gwas, output, append=written)
+                written = True
 
     except Exception as err:
         log.error(err)
