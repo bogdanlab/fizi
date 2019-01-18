@@ -13,6 +13,20 @@ __all__ = ['create_output', 'impute_gwas']
 
 
 def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None, pvals=None, start=None, stop=None):
+    """
+    Create an output pandas.DataFrame containing the original GWAS results and imputed results (if provided)
+
+    :param obs_snps: pyfizi.GWAS object containing the original GWAS data
+    :param imp_snps: pyfizi.RefPanel object containing data at imputed SNPs (default None)
+    :param gwas_n: int GWAS sample size (default None)
+    :param impZs: numpy.ndarray containing imputed Z-scores (default None)
+    :param r2blup: numpy.ndarray containing R2-blup values for imputed Z-scores (default None)
+    :param pvals: numpy.ndarray containing p-values for imputed Z-scores (default None)
+    :param start: int Starting base-pair position for imputed data (default None)
+    :param stop: int Stopping base-pair position for imputed data (default None)
+
+    :return: pandas.DataFrame of formatted, sorted observed and (optionally) imputed GWAS data
+    """
 
     GWAS = pyfizi.GWAS
     RefPanel = pyfizi.RefPanel
@@ -63,9 +77,12 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
         df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.R2COL,
                 GWAS.PCOL]]
 
+    # order the data by position
     df[GWAS.BPCOL] = df[GWAS.BPCOL].astype(int)
     df = df.sort_values(by=[GWAS.BPCOL])
 
+    # imputation relies on data outside the window (buffer parameter)
+    # prune down to actual imputation window here
     if start is not None and stop is not None:
         df = df.loc[(df[GWAS.BPCOL] >= start) & (df[GWAS.BPCOL] <= stop)]
     elif start is not None:
@@ -108,6 +125,8 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
     # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
 
+    # TODO: filter on large effect sizes, MAF, etc?
+
     # compute linkage-disequilibrium estimate
     log.debug("Estimating LD for {} SNPs".format(len(merged_snps)))
     LD = ref.estimate_ld(merged_snps, adjust=ridge)
@@ -130,11 +149,9 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
 
     imp_snps = merged_snps[to_impute]
 
-    # check for allele flips
+    # flip zscores at SNPs with diff ref allele between GWAS and RefPanel
     sset = merged_snps[obs_flag]
     obsZ = sset.Z.values
-
-    # flip zscores at SNPs with diff ref allele between GWAS and RefPanel
     obsZ = pyfizi.flip_alleles(obsZ, sset[GWAS.A1COL], sset[GWAS.A2COL], sset[RefPanel.A1COL], sset[RefPanel.A2COL])
 
     log.debug("Partitioning LD into quadrants")

@@ -116,20 +116,14 @@ class RefPanel(object):
     def overlap_gwas(self, gwas):
         df = self._snp_info
 
-        # we need to perform union (outer join) between the GWAS and RefPanel data
-        merged_snps = pd.merge(gwas, df, how="outer", left_on=pyfizi.GWAS.SNPCOL, right_on=pyfizi.RefPanel.SNPCOL)
-
-        # how are there duplicates in union?
-        # TODO: double-check if this is necessary
-        merged_snps.drop_duplicates(subset=pyfizi.RefPanel.SNPCOL, inplace=True)
+        # we only need to perform right join to get all matching RefPanel SNPs
+        # this is because we can re-use the original, unmatched, unverified GWAS data in output
+        merged_snps = pd.merge(gwas, df, how="right", left_on=pyfizi.GWAS.SNPCOL, right_on=pyfizi.RefPanel.SNPCOL)
 
         gwas_a1 = merged_snps[pyfizi.GWAS.A1COL]
         gwas_a2 = merged_snps[pyfizi.GWAS.A2COL]
         ref_a1 = merged_snps[pyfizi.RefPanel.A1COL]
         ref_a2 = merged_snps[pyfizi.RefPanel.A2COL]
-
-        # GWAS SNPs must be valid (ie non-ambiguous) alleles
-        valid_gwas = pyfizi.check_valid_snp(gwas_a1, gwas_a2)
 
         # RefPanel-only SNPs will be NA for GWAS; keep those
         valid_ref = pd.isna(gwas_a1)
@@ -137,11 +131,8 @@ class RefPanel(object):
         # Alleles for GWAS SNPs must be valid pairs with RefPanel alleles
         valid_match = pyfizi.check_valid_alleles(gwas_a1, gwas_a2, ref_a1, ref_a2)
 
-        # Drop GWAS SNPs not found in RefPanel
-        in_ref = ~pd.isna(merged_snps.i)
-
         # final valid is: valid RefPanel SNPs or non-ambiguous GWAS SNPs that match RefPanel SNPs
-        merged = merged_snps.loc[valid_ref | (valid_gwas & valid_match & in_ref)]
+        merged = merged_snps.loc[valid_ref | valid_match]
 
         return merged
 
