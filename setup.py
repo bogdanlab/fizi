@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyfizi",
-    version="0.6",
+    version="0.7",
     author="Nicholas Mancuso, Megan Roytman",
     author_email="nick.mancuso@gmail.com, meganroytman@gmail.com",
     description="Impute GWAS summary statistics using reference genotype data",

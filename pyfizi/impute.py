@@ -3,10 +3,6 @@ import logging
 import pyfizi
 import numpy as np
 import pandas as pd
-import scipy.linalg as lin
-import scipy.stats as stats
-
-from numpy.linalg import multi_dot as mdot
 
 
 __all__ = ['create_output', 'impute_gwas']
@@ -28,13 +24,13 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
     :return: pandas.DataFrame of formatted, sorted observed and (optionally) imputed GWAS data
     """
 
+    # aliases
     GWAS = pyfizi.GWAS
     RefPanel = pyfizi.RefPanel
 
     nall = len(obs_snps)
     nimp = len(imp_snps) if imp_snps is not None else 0
 
-    # this needs to be cleaned up. at some point just switch to 'standard' columns
     results = dict()
     if imp_snps is not None:
         results[GWAS.CHRCOL] = [obs_snps[GWAS.CHRCOL].iloc[0]] * (nimp + nall)
@@ -46,7 +42,7 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
         results[GWAS.ZCOL] = obs_snps[GWAS.ZCOL].tolist() + list(impZs)
         results[GWAS.R2COL] = ([1.0] * nall) + list(r2blup)
         if GWAS.NCOL in obs_snps:
-            neff = np.max(obs_snps[GWAS.NCOL]) * r2blup
+            neff = np.median(obs_snps[GWAS.NCOL]) * r2blup
             results[GWAS.NEFFCOL] = obs_snps[GWAS.NCOL].tolist() + list(neff)
         elif gwas_n is not None:
             neff = gwas_n * r2blup
@@ -70,9 +66,11 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
 
     df = pd.DataFrame(data=results)
 
+    # re-order columns to sensible format
     if GWAS.NCOL in obs_snps or gwas_n is not None:
         df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.R2COL,
                 GWAS.NEFFCOL, GWAS.PCOL]]
+        df[GWAS.NEFFCOL] = df[GWAS.NEFFCOL].astype(int)
     else:
         df = df[[GWAS.CHRCOL, GWAS.SNPCOL, GWAS.BPCOL, GWAS.A1COL, GWAS.A2COL, GWAS.TYPECOL, GWAS.ZCOL, GWAS.R2COL,
                 GWAS.PCOL]]
@@ -80,6 +78,9 @@ def create_output(obs_snps, imp_snps=None, gwas_n=None, impZs=None, r2blup=None,
     # order the data by position
     df[GWAS.BPCOL] = df[GWAS.BPCOL].astype(int)
     df = df.sort_values(by=[GWAS.BPCOL])
+
+    # make effect allele explicit
+    df = df.rename(index=str, columns={GWAS.A1COL: "A_EFFECT", GWAS.A2COL: "A_ALT"})
 
     # imputation relies on data outside the window (buffer parameter)
     # prune down to actual imputation window here
@@ -114,45 +115,87 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
     log.info("Starting imputation at region {}".format(ref))
 
     # fizi or impg
-    run_fizi = annot is not None and taus is not None
-
-    # cut down on typing
-    GWAS = pyfizi.GWAS
-    RefPanel = pyfizi.RefPanel
-    Annot = pyfizi.Annot
-    Taus = pyfizi.Taus
+    run_fizi = annot is not None
 
     # merge gwas with local-reference panel
     merged_snps = ref.overlap_gwas(gwas)
 
     # TODO: filter on large effect sizes, MAF, etc?
+    # Some stats may break normality assumption and we can improve results by dropping/pruning them
 
-    # compute linkage-disequilibrium estimate
-    log.debug("Estimating LD for {} SNPs".format(len(merged_snps)))
-    LD = ref.estimate_ld(merged_snps, adjust=ridge)
+    obs = merged_snps.are_observations()
+    to_impute = merged_snps.are_imputations()
 
-    obs_flag = ~pd.isna(merged_snps.Z)
-    to_impute = (~obs_flag).values
-    obs = obs_flag.values
+    imp_snps = merged_snps[to_impute]
+    obs_snps = merged_snps[obs]
+    nobs = len(obs_snps)
+    nimp = len(imp_snps)
 
-    nobs = np.sum(obs)
-    nimp = np.sum(to_impute)
     if nimp == 0:
         log.info("Skipping region {}. No SNPs require imputation".format(ref))
         return pyfizi.create_output(gwas, start=start, stop=stop)
 
     mprop = nobs / float(nobs + nimp)
-    log.debug("Proportion of observed-SNPs / total-SNPs = {}".format(mprop))
+    log.debug("Proportion of observed-SNPs / total-SNPs = {:.3g}".format(mprop))
     if mprop < prop:
-        log.info("Skipping region {}. Too few SNPs for imputation {:.3}%".format(ref, mprop))
+        log.warning("Skipping region {}. Too few SNPs for imputation {:.3g}%".format(ref, mprop))
         return pyfizi.create_output(gwas, start=start, stop=stop)
 
-    imp_snps = merged_snps[to_impute]
-
     # flip zscores at SNPs with diff ref allele between GWAS and RefPanel
-    sset = merged_snps[obs_flag]
-    obsZ = sset.Z.values
-    obsZ = pyfizi.flip_alleles(obsZ, sset[GWAS.A1COL], sset[GWAS.A2COL], sset[RefPanel.A1COL], sset[RefPanel.A2COL])
+    obsZ = pyfizi.flip_alleles(obs_snps.zscores,
+                               obs_snps.gwas_a1_alleles, obs_snps.gwas_a2_alleles,
+                               obs_snps.ref_a1_alleles, obs_snps.ref_a2_alleles)
+
+    if run_fizi and gwas_n is None and gwas.has_n():
+        gwas_n = np.median(gwas.ns)
+
+    # TODO: other statistics to report? estimated taus? residual variance?
+    # impute the missing zscores
+    impZs, pvals, r2blup = _impute(merged_snps, ref, annot, taus, gwas_n, obs, to_impute, obsZ, ridge, run_fizi)
+
+    df = pyfizi.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
+    log.info("Completed imputation at region {}".format(ref))
+
+    return df
+
+
+def _impute(merged_snps, ref, annot, taus, gwas_n, obs, to_impute, obsZ, ridge, run_fizi):
+    """
+    this is the internal logic for the imputation
+
+    I refactored this into diff function to improve flexibility for any changes downstream
+    (e.g., MI, sampling, sketching, etc)
+
+    testing out multiple imputation (MI) for the functional part of fizi
+    we could incorporate MI into the estimation of LD as well but it might come with a big computational hit
+    one cool trick might be to use sketching to speed up LD estimation to maintain performance for MI
+
+    :param merged_snps: pyfizi.MergedPanel object containing merged GWAS and LDRef data
+    :param ref: pyfizi.RefPanel object for reference genotype data at the region
+    :param annot: pyfizi.Annot object representing the functional annotations at the region (default: None)
+    :param taus: pyfizi.Tau object representing the prior variance terms for functional categories (default: None)
+    :param gwas_n: numpy.ndarray or int GWAS sample size. If int assumes sample size is uniform at each SNP.
+                    Not required if 'N' is column in GWAS data (default: None)
+    :param obsZ: numpy.ndarray vector of observed Z-scores that have been flipped to match ref panel
+    :param obs: numpy.ndarray boolean vector marking which rows in `merged_snps` have observed Z-scores
+    :param to_impute: numpy.ndarray boolean vector marking which rows in `merged_snps` need to be imputed
+    :param ridge: float Ridge term to regularize LD estimation (default=0.1)
+    :param run_fizi: bool indicating if fizi or impg is run
+
+    :return: (numpy.ndarray imputed_z, numpy.ndarray pvalues, numpy.ndarray r2blups)
+    """
+
+    from numpy.linalg import multi_dot as mdot
+    from scipy.linalg import pinvh
+    from scipy.stats import chi2
+
+    log = logging.getLogger(pyfizi.LOG)
+    nobs = np.sum(obs)
+    nimp = np.sum(to_impute)
+
+    # compute linkage-disequilibrium estimate
+    log.debug("Estimating LD for {} SNPs".format(len(merged_snps)))
+    LD = ref.estimate_ld(merged_snps, adjust=ridge)
 
     log.debug("Partitioning LD into quadrants")
     Voo_ld = LD[obs].T[obs].T
@@ -161,52 +204,61 @@ def impute_gwas(gwas, ref, gwas_n=None, annot=None, taus=None, start=None, stop=
     Vuu_ld = LD[to_impute].T[to_impute].T
 
     if run_fizi:
-        # merge annotations with merged reference snps
-        merged_snps = pd.merge(merged_snps, annot, how="left", left_on=RefPanel.SNPCOL, right_on=Annot.SNPCOL)
+        if taus is not None:
+            A = annot.get_matrix(merged_snps, taus.names)
+            estimates = taus.estimates
+            D = np.diag(gwas_n * np.dot(A, estimates))
+            Do = D.T[obs].T[obs]
+            Du = D.T[to_impute].T[to_impute]
+            uoV = Vuo_ld + mdot([Vuu_ld, Du, Vuo_ld]) + mdot([Vuo_ld, Do, Voo_ld])
+            ooV = Voo_ld + mdot([Voo_ld, Do, Voo_ld]) + mdot([Vou_ld, Du, Vuo_ld])
+            uuV = Vuu_ld + mdot([Vuu_ld, Du, Vuu_ld]) + mdot([Vuo_ld, Do, Vou_ld])
+        else:
+            A = annot.get_matrix(merged_snps)
+            names = annot.names
+            Ao = A[obs]
+            flag = np.mean(Ao != 0, axis=0) > 0
+            Ao = Ao.T[flag].T
+            A = A.T[flag].T
+            names = names[flag]
 
-        # this assumes all taus columns are in the annotations
-        # we should perform a sanity check when the program launches...
-        sigma_values = taus[Taus.TAUCOL]
-        annot_names = taus[Taus.NAMECOL].values.flatten()
-        A = merged_snps[annot_names].values
+            log.debug("Starting inference for variance parameters")
+            estimates = pyfizi.infer_taus(obsZ, Voo_ld, Ao)
+            if estimates is not None:
+                log.debug("Finished variance parameter inference")
 
-        # this assumes intercept is first...
-        # fine for now but we should fix this...
-        A.T[0] = 1
-        A[np.isnan(A)] = 0
+                estimates, sigma2e = estimates
+                # rescale estimates
+                estimates = estimates * np.sum(Ao != 0, axis=0) / np.sum(A != 0, axis=0)
 
-        if gwas_n is None and GWAS.NCOL in gwas:
-            gwas_n = np.median(gwas[GWAS.NCOL])
-
-        D = np.diag(gwas_n * np.dot(A, sigma_values))
-        Do = D.T[obs].T[obs]
-        Du = D.T[to_impute].T[to_impute]
-        uoV = Vuo_ld + mdot([Vuu_ld, Du, Vuo_ld]) + mdot([Vuo_ld, Do, Voo_ld])
-        ooV = Voo_ld + mdot([Voo_ld, Do, Voo_ld]) + mdot([Vou_ld, Du, Vuo_ld])
-        uuV = Vuu_ld + mdot([Vuu_ld, Du, Vuu_ld]) + mdot([Vuo_ld, Do, Vou_ld])
+                # N gets inferred as part of the parameter
+                D = np.diag(np.dot(A, estimates))
+                Do = D.T[obs].T[obs]
+                Du = D.T[to_impute].T[to_impute]
+                uoV = Vuo_ld + mdot([Vuu_ld, Du, Vuo_ld]) + mdot([Vuo_ld, Do, Voo_ld])
+                ooV = Voo_ld + mdot([Voo_ld, Do, Voo_ld]) + mdot([Vou_ld, Du, Vuo_ld])
+                uuV = Vuu_ld + mdot([Vuu_ld, Du, Vuu_ld]) + mdot([Vuo_ld, Do, Vou_ld])
+            else:
+                log.warning("Variance parameter optimization failed. Defaulting to ImpG")
+                # estimation failed... default to ImpG
+                uoV = Vuo_ld
+                ooV = Voo_ld
+                uuV = Vuu_ld
     else:
         uoV = Vuo_ld
         ooV = Voo_ld
         uuV = Vuu_ld
 
-    log.debug("Computing inverse of variance-covariance matrix for {} observed SNPs".format(sum(obs)))
-    try:
-        ooVinv = lin.inv(ooV, check_finite=False)
-    except lin.LinAlgError:
-        log.debug("Inverse failed. Falling back to psuedo-inverse")
-        ooVinv = lin.pinvh(ooV, check_finite=False)
+    log.debug("Computing inverse of variance-covariance matrix for {} observed SNPs".format(nobs))
+    ooVinv = pinvh(ooV, check_finite=False)
 
-    log.debug("Imputing {} SNPs from {} observed scores".format(sum(to_impute), sum(obs)))
-    # predict the Z-scores
+    log.debug("Imputing {} SNPs from {} observed scores".format(nimp, nobs))
     impZs = mdot([uoV, ooVinv, obsZ])
 
     # compute r2-pred scores
     r2blup = np.diag(mdot([uoV, ooVinv, uoV.T])) / np.diag(uuV)
 
     # compute two-sided z-test for p-value
-    pvals = stats.chi2.sf(impZs ** 2, 1)
+    pvals = chi2.sf(impZs ** 2, 1)
 
-    df = pyfizi.create_output(gwas, imp_snps, gwas_n, impZs, r2blup, pvals, start, stop)
-    log.info("Completed imputation at region {}".format(ref))
-
-    return df
+    return impZs, pvals, r2blup

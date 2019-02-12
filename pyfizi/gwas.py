@@ -50,6 +50,13 @@ class GWAS(pd.DataFrame):
     def _constructor_sliced(self):
         return pyfizi.GWASSeries
 
+    def has_n(self):
+        return GWAS.NCOL in self.columns
+
+    @property
+    def ns(self):
+        return self[GWAS.NCOL].values
+
     def subset_by_pos(self, chrom, start=None, stop=None):
         if start is not None and stop is not None:
             snps = self.loc[(self[GWAS.CHRCOL] == chrom) & (self[GWAS.BPCOL] >= start) & (self[GWAS.BPCOL] <= stop)]
@@ -65,8 +72,7 @@ class GWAS(pd.DataFrame):
     @classmethod
     def parse_gwas(cls, stream):
         dtype_dict = {'CHR': "category", 'SNP': str, 'Z': float, 'N': float, 'A1': str, 'A2': str}
-        cmpr = pyfizi.get_compression(stream)
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression='infer')
         for column in GWAS.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in summary statistics".format(column))

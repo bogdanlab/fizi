@@ -132,7 +132,7 @@ class RefPanel(object):
         valid_match = pyfizi.check_valid_alleles(gwas_a1, gwas_a2, ref_a1, ref_a2)
 
         # final valid is: valid RefPanel SNPs or non-ambiguous GWAS SNPs that match RefPanel SNPs
-        merged = merged_snps.loc[valid_ref | valid_match]
+        merged = pyfizi.MergedPanel(merged_snps.loc[valid_ref | valid_match])
 
         return merged
 
@@ -176,3 +176,56 @@ class RefPanel(object):
             np.warnings.filterwarnings('ignore', 'FutureWarning')
             bim, fam, bed = read_plink(path, verbose=False)
         return RefPanel(bim, fam, bed)
+
+
+class MergedPanelSeries(pd.Series):
+    @property
+    def _constructor(self):
+        return pyfizi.MergedPanelSeries
+
+    @property
+    def _constructor_expanddim(self):
+        return pyfizi.MergedPanel
+
+
+class MergedPanel(pd.DataFrame):
+
+    def __init__(self, *args, **kwargs):
+        super(MergedPanel, self).__init__(*args, **kwargs)
+        return
+
+    @property
+    def _constructor(self):
+        return pyfizi.MergedPanel
+
+    @property
+    def _constructor_sliced(self):
+        return pyfizi.MergedPanelSeries
+
+    @property
+    def zscores(self):
+        return self["Z"].values
+
+    @property
+    def gwas_a1_alleles(self):
+        return self[pyfizi.GWAS.A1COL]
+
+    @property
+    def gwas_a2_alleles(self):
+        return self[pyfizi.GWAS.A2COL]
+
+    @property
+    def ref_a1_alleles(self):
+        return self[pyfizi.RefPanel.A1COL]
+
+    @property
+    def ref_a2_alleles(self):
+        return self[pyfizi.RefPanel.A2COL]
+
+    def are_observations(self):
+        obs_flag = ~pd.isna(self.zscores)
+        return obs_flag
+
+    def are_imputations(self):
+        to_impute = pd.isna(self.zscores)
+        return to_impute

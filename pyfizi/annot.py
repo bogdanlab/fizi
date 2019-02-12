@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 import pyfizi
@@ -38,6 +39,32 @@ class Annot(pd.DataFrame):
     def _constructor_sliced(self):
         return pyfizi.AnnotSeries
 
+    @property
+    def names(self):
+        flag = self.columns.map(lambda x: x not in [Annot.CHRCOL, Annot.SNPCOL, Annot.BPCOL, Annot.CMCOL]).values
+        return self.columns[flag.astype(bool)]
+
+    def get_matrix(self, snps, names=None):
+        """
+        Get the binary annotation matrix for the SNPs found in snps data.
+
+        :param snps: pandas.DataFrame containing SNP info (must have `SNP` column)
+        :param names: list or numpy.ndarray containing the names of the annotations to look up
+        :return: numpy.ndarray 0/1 matrix indicating which annotations the SNPs fall in
+        """
+        snps = pd.merge(snps, self, how="left", left_on=pyfizi.RefPanel.SNPCOL, right_on=Annot.SNPCOL)
+        if names is None:
+            names = self.names
+
+        A = snps[names].values
+
+        # this assumes intercept is first...
+        # fine for now but we should fix this...
+        A.T[0] = 1
+        A[np.isnan(A)] = 0
+
+        return A
+
     def subset_by_pos(self, chrom, start, stop):
         if pd.api.types.is_string_dtype(self[Annot.CHRCOL]) or pd.api.types.is_categorical_dtype(self[Annot.CHRCOL]):
             chrom = str(chrom)
@@ -56,12 +83,21 @@ class Annot(pd.DataFrame):
         return Annot(snps)
 
     @classmethod
-    def parse_annot(cls, stream):
+    def parse_annot(cls, stream, names=None):
         dtype_dict = {'SNP': str, 'BP': int}
-        cmpr = pyfizi.get_compression(stream)
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression='infer')
         for column in Annot.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in annotation file".format(column))
+
+        # if user-specified only a subset of annotations to be included
+        if names is not None:
+            if 'base' not in names:
+                names = ['base'] + names
+                for name in names:
+                    if name not in df:
+                        raise ValueError("{}-column not found in annotation file".format(name))
+                columns = Annot.REQ_COLS + names
+                df = df[columns]
 
         return cls(df)

@@ -17,6 +17,14 @@ from scipy.stats import chi2
 np.seterr(invalid='ignore')
 
 
+def parse_annots(alist):
+    values = re.split(",", alist)
+    if not values:
+        raise argparse.ArgumentTypeError("annot-list should be comma-separated list with no spaces")
+
+    return values
+
+
 def parse_pos(pos, option):
     """
     Parse a specified genomic position.
@@ -102,7 +110,7 @@ def get_command_string(args):
     needs_tab = True
     for cmd in rest:
         if "-" == cmd[0]:
-            if cmd in ["--quiet", "-q", "--verbose", "-v", "--force-non-negative"]:
+            if cmd in ["--quiet", "-q", "--verbose", "-v"]:
                 rest_strs.append("\t{}{}".format(cmd, os.linesep))
                 needs_tab = True
             else:
@@ -399,11 +407,9 @@ def munge(args):
         # Chromosome
         'CHR': 'CHR',
         'CHROM': 'CHR',
-
         # BP
         'BP': 'BP',
         'POS': 'BP',
-
         # RS NUMBER
         'SNP': 'SNP',
         'MARKERNAME': 'SNP',
@@ -496,8 +502,6 @@ def munge(args):
     }
 
     try:
-        if args.sumstats is None:
-            raise ValueError('The --sumstats flag is required')
         if args.daner and args.daner_n:
             raise ValueError('--daner and --daner-n are not compatible. Use --daner for sample ' +
                              'size from FRQ_A/FRQ_U headers, use --daner-n for values from Nca/Nco columns')
@@ -570,9 +574,9 @@ def munge(args):
 
         # check that we have all the columns we need
         if not args.a1_inc:
-            req_cols = ['CHR', 'SNP', 'P', 'SIGNED_SUMSTAT']
+            req_cols = ['CHR', 'BP', 'SNP', 'A1', 'A2', 'P', 'SIGNED_SUMSTAT']
         else:
-            req_cols = ['CHR', 'SNP', 'P']
+            req_cols = ['CHR', 'BP', 'SNP', 'A1', 'A2', 'P']
 
         for c in req_cols:
             if c not in cname_translation.values():
@@ -730,28 +734,30 @@ def impute(args):
 
         # load functional annotations and taus
         # parity check for functional data
-        if args.annot is not None and args.taus is None:
-            raise ValueError("Annotation requires corresponding LDSC escimates (--taus) file")
         if args.annot is None and args.taus is not None:
             raise ValueError("LDSC estimates require corresponding annotation (--annot) file")
 
-        run_fizi = args.annot is not None and args.taus is not None
+        run_fizi = args.annot is not None
         if run_fizi:
             log.info("Preparing annotation file")
-            annot = pyfizi.Annot.parse_annot(args.annot)
-            log.info("Preparing SNP effect-size variance file")
-            taus = pyfizi.Taus.parse_taus(args.taus)
-            taus = taus.subset_by_enrich_pvalue(args.alpha)
-            if args.force_non_negative:
-                taus.set_nonnegative()
+            annot = pyfizi.Annot.parse_annot(args.annot, args.annot_names)
+            if len(annot.names) == 0:
+                raise ValueError("No remaining annotations for inference")
+
+            if args.taus is not None:
+                log.info("Preparing SNP effect-size variance file")
+                taus = pyfizi.Taus.parse_taus(args.taus, args.annot_names)
+                taus = taus.subset_by_enrich_pvalue(args.alpha)
+                for cn in taus.names:
+                    if cn not in annot.names:
+                        raise KeyError("Prior variance for {} not found in annotation file".format(cn))
+                if len(taus) == 0:
+                    raise ValueError("No tau estimates remaining for inference")
+            else:
+                taus = None
+                log.info("Using {} annotation(s) for tau estimate(s)".format(len(annot.names)))
 
             # we should check columns in taus are contained in annot here...
-            sig_cnames = taus[pyfizi.Taus.NAMECOL]
-            annot_cnames = annot.columns.values
-            for cn in sig_cnames:
-                if cn not in annot_cnames:
-                    raise KeyError("Prior variance for {} not found in annotation file".format(cn))
-
         log.info("Starting summary statistics imputation with window size {} and buffer size {}".format(window_size, buffer_size))
         written = False
         with open("{}.sumstat".format(args.output), "w") as output:
@@ -791,9 +797,10 @@ def impute(args):
                     else:
                         imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref, annot=part_annot, taus=taus,
                                                           prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
+
                 else:
-                    imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref,
-                                                    prop=min_prop, start=start, stop=stop, ridge=args.ridge_term)
+                    imputed_gwas = pyfizi.impute_gwas(part_gwas, part_ref, prop=min_prop, start=start, stop=stop,
+                                                      ridge=args.ridge_term)
 
                 # format floats to only use 3 decimal places
                 pyfizi.write_output(imputed_gwas, output, append=written)
@@ -813,7 +820,8 @@ def main(argsv):
 
     # add subparser for the  munge summary statistics program
     subp = argp.add_subparsers(title="Subcommands",
-                               help="'munge' to clean up summary statistics. 'impute' to perform imputation.")
+                               help="'munge' to clean up summary statistics (see fizi munge --help)." +
+                               "'impute' to perform imputation (see fizi impute --help).")
 
     munp = subp.add_parser("munge",
                            description="Munge summary statistics input to conform to FIZI requirements")
@@ -903,12 +911,12 @@ def main(argsv):
     # functional arguments
     impp.add_argument("--annot", default=None,
                       help="Path to SNP functional annotation data. Should be in LDScore regression-style format. Supports gzip and bz2 compression.")
+    impp.add_argument("--annot-names", type=parse_annots,
+                      help="Comma-separated list of annotations to use in the `annot` file (e.g., `--annot-names Coding_UCSC.bed,DHS_Trynka.bed`). Baseline is always included.")
     impp.add_argument("--taus", default=None,
                       help="Path to LDScore regression output. Must contain coefficient estimates. Supports gzip and bz2 compression.")
     impp.add_argument("--alpha", default=1.00, type=float,
                       help="Significance threshold to determine which functional categories to keep.")
-    impp.add_argument("--force-non-negative", default=False, action="store_true",
-                      help="Set negative variance parameters to zero.")
 
     # GWAS options
     impp.add_argument("--gwas-n", default=None, type=int,

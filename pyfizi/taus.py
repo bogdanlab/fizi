@@ -40,6 +40,18 @@ class Taus(pd.DataFrame):
     def _constructor_sliced(self):
         return pyfizi.TausSeries
 
+    @property
+    def estimates(self):
+        return self[Taus.TAUCOL].values
+
+    @property
+    def std_errors(self):
+        return self[Taus.TAUSECOL].values
+
+    @property
+    def names(self):
+        return self[Taus.NAMECOL].values.flatten()
+
     def subset_by_tau_pvalue(self, pvalue, keep_baseline=True):
         zscores = self[Taus.TAUZCOL].values
         pval_flag = 2 * stats.norm.sf(zscores) < pvalue
@@ -69,15 +81,16 @@ class Taus(pd.DataFrame):
         return
 
     @classmethod
-    def parse_taus(cls, stream):
+    def parse_taus(cls, stream, names=None):
         dtype_dict = {'Category': str}
-        cmpr = pyfizi.get_compression(stream)
-        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression=cmpr)
+        df = pd.read_csv(stream, dtype=dtype_dict, delim_whitespace=True, compression='infer')
         for column in Taus.REQ_COLS:
             if column not in df:
                 raise ValueError("{}-column not found in LDSC tau-estimates file".format(column))
 
         # remove L2_0 from variable names
         df[Taus.NAMECOL] = df[Taus.NAMECOL].str.replace("L2_0", "")
+        if names is not None:
+            df = df[df[Taus.NAMECOL].isin(names)]
 
         return cls(df)
