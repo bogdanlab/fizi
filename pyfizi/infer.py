@@ -44,13 +44,7 @@ def _infer_taus_hereg(zscores, LD, A):
 
     # each column in our multiple regression is the lower triangular values of the Vdiag(A_i)V matrix where V = LD
     def get_component(LD, A, jdx):
-        M = np.zeros((k, k))
-        for idx in range(k):
-            e_i = _basis(idx, k)
-            if A[idx, jdx] == 1:
-                M += np.outer(e_i, e_i)
-
-        return mdot([LD, M, LD])[np.tril_indices(k)]
+        return np.dot(LD * A.T[jdx], LD)[np.tril_indices(k)]
 
     # build regression matrix
     X = np.stack((get_component(LD, A, jdx) for jdx in range(t)), axis=1)
@@ -91,13 +85,7 @@ def _infer_taus_reml(zscores, LD, A):
     r = t + 1
 
     def get_component(LD, A, jdx):
-        M = np.zeros((k, k))
-        for idx in range(k):
-            e_i = _basis(idx, k)
-            if A[idx, jdx] == 1:
-                M += np.outer(e_i, e_i)
-
-        return mdot([LD, M, LD])
+        return np.dot(LD * A.T[jdx], LD)
 
     As = [get_component(LD, A, jdx) for jdx in range(t)] + [LD]
 
