@@ -9,18 +9,6 @@ from scipy.stats import multivariate_normal as mvn
 __all__ = ["infer_taus"]
 
 
-def _basis(idx, k):
-    """
-    Compute the idx'th basis vector of dimension k
-    :param idx: int the basis to represent
-    :param k: the dimension of the vector space
-    :return: numpy.ndarray basis_idx vector
-    """
-    d = np.zeros(k)
-    d[idx] = 1
-    return d
-
-
 def _infer_taus_hereg(zscores, LD, A):
     """
     Infer the variance parameters (tau) using HE-Regression over the summary statistics
