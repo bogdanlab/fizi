@@ -8,27 +8,20 @@ This README is a working draft and will be expanded soon.
 
 Installation
 ----
-0. Make sure that setuptools is up-to-date by typing the following command
+The easiest way to install `fizi` and `pyfizi` is through conda and conda-forge:
 
-    `pip install setuptools --upgrade --user`
+    conda config --add channels conda-forge
+    conda install pyfizi
     
-1. First grab the latest version of FIZI using git as
+Alternatively you can use pip for installation:
 
-    `git clone https://github.com/bogdanlab/fizi`
+    `pip install pyfizi --user`
     
-2. FIZI can be installed using setuptools as 
-
-    `cd fizi` then
-    
-    `python setup.py install --user` or optionally as
-    
-    `sudo python setup.py install` if you have root access and wish to install for all users
-    
-3. Check that FIZI was installed by typing
+Check that FIZI was installed by typing
 
     `fizi --help`
 
-4. If that did not work, and `--user` was specified, please check that your local user path is included in
+If that did not work, and `pip install pyfizi --user` was specified, please check that your local user path is included in
 `$PATH` environment variable. `--user` location and can be appended to `$PATH`
 by executing
 
@@ -38,6 +31,22 @@ by executing
     
     `source ~/.bashrc` or `source .bash_profile` depending where you entered it.
 
+We currently only support Python3.
+
+Overview
+--------
+`fizi` has two main functions: `munge` and `impute`. The `munge` subcommand is a pruned down version of the LDSC munge_sumstats software with a few bells and whistles needed for our imputation algorithm. The `impute` subcommand performs summary statistic imputation using either the functionally informed algorithm in addition to reference LD (i.e. `fizi`) or using only reference LD (i.e. ImpG). For a full list of features please refer to the help command: `fizi munge -h` or `fizi impute -h`. 
+
+Imputing summary statistics using only reference LD
+------
+When functional annotations and LDSC estimates are not provided to `fizi`, it will fallback to the classic ImpG
+algorithm described in ref[1]. To impute missing summary statistics using the ImpG algorithm simply enter the
+command 
+
+    1. fizi munge gwas.sumstat.gz --out cleaned.gwas
+    2. fizi impute cleaned.gwas.sumstat.gz plink_data_path --chr 1 --out imputed.cleaned.gwas.sumstat
+
+By default `fizi` requires that at least 50% of SNPs to be observed for imputation at a region. This can be changed with the `--min-prop PROP` flag in step 2.
 
 Incorporating functional data to improve summary statistics imputation
 -----
@@ -52,14 +61,6 @@ chromosome 1 of our data:
 3. Run LDSC on locoChr to obtain tau estimates
 4. Perform functionally-informed imputation on chr1 data using tau estimates from loco-chr
 
-Imputing summary statistics using only reference LD
-------
-When functional annotations and LDSC estimates are not provided to FIZI, it will fallback to the classic ImpG
-algorithm described in ref[1]. To impute missing summary statistics using the ImpG algorithm simply enter the
-command 
-
-    fizi impute cleaned.gwas.sumstat.gz plink_data_path --chr 1 --out imputed.cleaned.gwas.sumstat
-
 Software and support
 -----
 If you have any questions or comments please contact nmancuso@mednet.ucla.edu and/or meganroytman@gmail.com
@@ -70,3 +71,5 @@ For performing various inferences using summary data from large-scale GWASs plea
 2. Estimating local heritability or genetic correlation [HESS](https://github.com/huwenboshi/hess)
 3. Estimating genome-wide heritability or genetic correlation [UNITY](https://github.com/bogdanlab/UNITY)
 4. Fine-mapping using summary-data [PAINTOR](https://github.com/gkichaev/PAINTOR_V3.0)
+
+[1]: https://academic.oup.com/bioinformatics/article/30/20/2906/2422225
