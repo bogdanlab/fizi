@@ -15,21 +15,23 @@ The easiest way to install `fizi` and `pyfizi` is through conda and conda-forge:
     
 Alternatively you can use pip for installation:
 
-    `pip install pyfizi --user`
+    pip install pyfizi --user
     
 Check that FIZI was installed by typing
 
-    `fizi --help`
+    fizi --help
 
 If that did not work, and `pip install pyfizi --user` was specified, please check that your local user path is included in
 `$PATH` environment variable. `--user` location and can be appended to `$PATH`
 by executing
 
-    `` export PATH=`python -m site --user-base`/bin/:$PATH ``
+    export PATH=`python -m site --user-base`/bin/:$PATH
     
-    which can be saved in `.bashrc` or `.bash_profile`. To reload the environment type
+which can be saved in `.bashrc` or `.bash_profile`. To reload the environment type
     
-    `source ~/.bashrc` or `source .bash_profile` depending where you entered it.
+    source ~/.bashrc` or `source .bash_profile 
+
+depending where you entered it.
 
 We currently only support Python3.
 
@@ -40,8 +42,8 @@ Overview
 Imputing summary statistics using only reference LD
 ------
 When functional annotations and LDSC estimates are not provided to `fizi`, it will fallback to the classic ImpG
-algorithm described in ref[1]. To impute missing summary statistics using the ImpG algorithm simply enter the
-command 
+algorithm described in ref [1]. To impute missing summary statistics using the ImpG algorithm simply enter the
+commands
 
     1. fizi munge gwas.sumstat.gz --out cleaned.gwas
     2. fizi impute cleaned.gwas.sumstat.gz plink_data_path --chr 1 --out imputed.cleaned.gwas.sumstat
