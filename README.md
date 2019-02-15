@@ -33,7 +33,7 @@ which can be saved in `.bashrc` or `.bash_profile`. To reload the environment ty
 
 depending where you entered it.
 
-We currently only support Python3.
+*We currently only support Python3.6* Support for Python 3.6+ is in the works (conda dependencies amirite).
 
 Overview
 --------
@@ -42,11 +42,11 @@ Overview
 Imputing summary statistics using only reference LD
 ------
 When functional annotations and LDSC estimates are not provided to `fizi`, it will fallback to the classic ImpG
-algorithm described in ref [1]. To impute missing summary statistics using the ImpG algorithm simply enter the
-commands
+algorithm described in ref [1]. To impute missing summary statistics only for chromosome 1 using the ImpG algorithm 
+simply enter the commands
 
     1. fizi munge gwas.sumstat.gz --out cleaned.gwas
-    2. fizi impute cleaned.gwas.sumstat.gz plink_data_path --chr 1 --out imputed.cleaned.gwas.sumstat
+    2. fizi impute cleaned.gwas.sumstat.gz plink_data_path --chr 1 --out imputed.cleaned.gwas.chr1.sumstat
 
 By default `fizi` requires that at least 50% of SNPs to be observed for imputation at a region. This can be changed with the `--min-prop PROP` flag in step 2.
 
