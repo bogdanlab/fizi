@@ -37,7 +37,7 @@ depending where you entered it.
 
 Overview
 --------
-`fizi` has two main functions: `munge` and `impute`. The `munge` subcommand is a pruned down version of the LDSC munge_sumstats software with a few bells and whistles needed for our imputation algorithm. The `impute` subcommand performs summary statistic imputation using either the functionally informed algorithm in addition to reference LD (i.e. `fizi`) or using only reference LD (i.e. ImpG). For a full list of features please refer to the help command: `fizi munge -h` or `fizi impute -h`. 
+`fizi` has two main functions: `munge` and `impute`. The `munge` subcommand is a pruned down version of the LDSC munge_sumstats software with a few bells and whistles needed for our imputation algorithm. The `impute` subcommand performs summary statistic imputation using either the functionally informed algorithm (i.e. `fizi`) or using only reference-LD-only algorithm (i.e. ImpG). For a full list of features please refer to the help command: `fizi munge -h` or `fizi impute -h`. 
 
 Imputing summary statistics using only reference LD
 ------
