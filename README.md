@@ -33,7 +33,7 @@ which can be saved in `.bashrc` or `.bash_profile`. To reload the environment ty
 
 depending where you entered it.
 
-*We currently only support Python3.6* Support for Python 3.6+ is in the works (conda dependencies amirite).
+*We currently only support Python3.6+. If you're still using Python2.7 may we _gently_ remind you that 2020 is the deadline for official support and it might be time to try out Python3!*
 
 Overview
 --------
