@@ -33,7 +33,7 @@ which can be saved in `.bashrc` or `.bash_profile`. To reload the environment ty
 
 depending where you entered it.
 
-*We currently only support Python3.6+. If you're still using Python2.7 may we _gently_ remind you that 2020 is the deadline for official support and it might be time to try out Python3!*
+*We currently only support Python3.6+*
 
 Overview
 --------
