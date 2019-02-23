@@ -27,13 +27,9 @@ by executing
 
     export PATH=`python -m site --user-base`/bin/:$PATH
     
-which can be saved in `.bashrc` or `.bash_profile`. To reload the environment type
-    
-    source ~/.bashrc` or `source .bash_profile 
+which can be saved in `~/.bashrc` or `~/.bash_profile`. To reload the environment type `source ~/.bashrc` or `source ~/.bash_profile` depending where you entered it.
 
-depending where you entered it.
-
-*We currently only support Python3.6+*
+*We currently only support Python3.6+. [Python2.7 and below is not supported](https://pythonclock.org/)*
 
 Overview
 --------
