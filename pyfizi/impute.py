@@ -207,7 +207,7 @@ def _impute(merged_snps, ref, annot, taus, gwas_n, obs, to_impute, obsZ, ridge, 
         if taus is not None:
             A = annot.get_matrix(merged_snps, taus.names)
             estimates = taus.estimates
-            D = np.diag(gwas_n * np.dot(A, estimates))
+            D = np.diag(gwas_n * np.dot(A, estimates)) #/ np.power(np.median(merged_snps.SE.values[obs]), 2)
             Do = D.T[obs].T[obs]
             Du = D.T[to_impute].T[to_impute]
             uoV = Vuo_ld + mdot([Vuu_ld, Du, Vuo_ld]) + mdot([Vuo_ld, Do, Voo_ld])

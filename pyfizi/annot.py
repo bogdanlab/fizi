@@ -25,6 +25,8 @@ class Annot(pd.DataFrame):
     BPCOL = "BP"
     CMCOL = "CM"
 
+    BASE_NAME = "base"
+
     REQ_COLS = [CHRCOL, SNPCOL, BPCOL]
 
     def __init__(self, *args, **kwargs):
@@ -57,10 +59,6 @@ class Annot(pd.DataFrame):
             names = self.names
 
         A = snps[names].values
-
-        # this assumes intercept is first...
-        # fine for now but we should fix this...
-        A.T[0] = 1
         A[np.isnan(A)] = 0
 
         return A

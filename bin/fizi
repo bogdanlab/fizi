@@ -238,7 +238,7 @@ def parse_dat(dat_gen, convert_colname, log, args):
     msg = 'Reading sumstats from {F} into memory {N} SNPs at a time'
     log.info(msg.format(F=args.sumstats, N=int(args.chunksize)))
     drops = {'NA': 0, 'P': 0, 'INFO': 0, 'FRQ': 0, 'A': 0, 'SNP': 0}
-    numeric_cols = ['P', 'N', 'N_CAS', 'N_CON', 'Z', 'OR', 'BETA', 'LOG_ODDS', 'INFO', 'FRQ', 'SIGNED_SUMSTAT', 'NSTUDY']
+    numeric_cols = ['P', 'N', 'N_CAS', 'N_CON', 'Z', 'OR', 'BETA', 'LOG_ODDS', 'INFO', 'FRQ', 'SIGNED_SUMSTAT', 'NSTUDY', 'SE']
 
     for block_num, dat in enumerate(dat_gen):
         log.info('Reading SNP chunk {}'.format(block_num + 1))
@@ -471,6 +471,9 @@ def munge(args):
         'EFFECTS': 'BETA',
         'EFFECT': 'BETA',
         'SIGNED_SUMSTAT': 'SIGNED_SUMSTAT',
+        # Standard Error
+        'SE': 'SE',
+        'std_error': 'SE',
         # INFO
         'INFO': 'INFO',
         # MAF
@@ -494,6 +497,7 @@ def munge(args):
         'Z': 'Z-score (0 --> no effect; above 0 --> A1 is trait/risk increasing)',
         'OR': 'Odds ratio (1 --> no effect; above 1 --> A1 is risk increasing)',
         'BETA': '[linear/logistic] regression coefficient (0 --> no effect; above 0 --> A1 is trait/risk increasing)',
+        'SE': 'Standard error of the beta',
         'LOG_ODDS': 'Log odds ratio (0 --> no effect; above 0 --> A1 is risk increasing)',
         'INFO': 'INFO score (imputation quality; higher --> better imputation)',
         'FRQ': 'Allele frequency',
@@ -574,9 +578,9 @@ def munge(args):
 
         # check that we have all the columns we need
         if not args.a1_inc:
-            req_cols = ['CHR', 'BP', 'SNP', 'A1', 'A2', 'P', 'SIGNED_SUMSTAT']
+            req_cols = ['CHR', 'BP', 'SNP', 'A1', 'A2', 'P', 'SIGNED_SUMSTAT', 'SE']
         else:
-            req_cols = ['CHR', 'BP', 'SNP', 'A1', 'A2', 'P']
+            req_cols = ['CHR', 'BP', 'SNP', 'A1', 'A2', 'P', 'SE']
 
         for c in req_cols:
             if c not in cname_translation.values():
@@ -650,7 +654,7 @@ def munge(args):
 
         out_fname = args.output + '.sumstats.gz'
         print_colnames = []
-        for c in ['CHR', 'SNP', 'BP', 'A1', 'A2', 'FRQ', 'Z', 'N']:
+        for c in ['CHR', 'SNP', 'BP', 'A1', 'A2', 'FRQ', 'Z', 'SE', 'N']:
             if c in dat.columns:
                 if c == 'FRQ' and not args.keep_maf:
                     continue
@@ -744,10 +748,20 @@ def impute(args):
             if len(annot.names) == 0:
                 raise ValueError("No remaining annotations for inference")
 
+            n_annot = len(annot)
+            annot = annot.drop_duplicates(pyfizi.Annot.SNPCOL)
+            n_annot_dd = len(annot)
+            if n_annot != n_annot_dd:
+                diff = n_annot - n_annot_dd
+                log.info("Dropped {} duplicated SNP annotations".format(diff))
+
             if args.taus is not None:
                 log.info("Preparing SNP effect-size variance file")
                 taus = pyfizi.Taus.parse_taus(args.taus, args.annot_names)
+                n_t = len(taus)
                 taus = taus.subset_by_enrich_pvalue(args.alpha)
+                n_tt = len(taus)
+                log.info("Dropped {} annotations with p-value less than {}".format(n_t - n_tt, args.alpha))
                 for cn in taus.names:
                     if cn not in annot.names:
                         raise KeyError("Prior variance for {} not found in annotation file".format(cn))

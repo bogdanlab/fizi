@@ -30,6 +30,7 @@ class GWAS(pd.DataFrame):
     ZCOL = "Z"
 
     PCOL = "P"
+    SECOL = "SE"
     NCOL = "N"
 
     NEFFCOL = "NEFF"
