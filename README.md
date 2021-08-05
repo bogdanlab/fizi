@@ -16,6 +16,12 @@ The easiest way to install `fizi` and `pyfizi` is through conda and conda-forge:
 Alternatively you can use pip for installation:
 
     pip install pyfizi
+
+Or directly from the github repository:
+
+    git clone git@github.com:bogdanlab/fizi.git
+    cd fizi
+    pip install .
     
 Check that FIZI was installed by typing
 
