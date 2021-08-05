@@ -7,7 +7,7 @@ from .io import *
 from .ref import *
 from .taus import *
 
-__version__ = "0.7"
+__version__ = "0.7.1"
 
 LOG = "MAIN"
 VERSION = __version__
