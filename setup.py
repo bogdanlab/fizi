@@ -17,7 +17,7 @@ setuptools.setup(
     install_requires=[
         "numpy>=1.14.5",
         "scipy>=1.2.0",
-        "pandas>=0.23.3",
+        "pandas>=1.2.0",
         "pandas-plink",
       ],
     scripts=[

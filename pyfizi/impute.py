@@ -249,6 +249,35 @@ def _impute(merged_snps, ref, annot, taus, gwas_n, obs, to_impute, obsZ, ridge, 
         ooV = Voo_ld
         uuV = Vuu_ld
 
+    """
+    TODO: consider replacing with the following more numerically stable and efficient code
+    this is low priority but might be useful to explore at some point
+
+    # method 1; no extra overhead, but addtl solve cost
+    ooL = cholesky(ooV, lower=True)
+    uoVLinv = triangular_solve(ooL, uoV.T, lower=True)
+    LinvZ = triangular_solve(ooL, obsZ, lower=True)
+
+    impZs = uoVLinv.T @ LinvZ
+    r2blup = np.sum(uoVLinv ** 2, axis=0) / np.diag(uuV)
+
+    # method 2; extra memory, but cheaper solve cost
+    ooL = cholesky(ooV, lower=True)
+    tmp = triangular_solve(ooL, np.concatenate((obsZ[:,np.newaxis], uoV.T), axis=1), lower=True)
+    uoVLinv = tmp.T[1:]
+    LinvZ = tmp.T[0]
+
+    impZs = uoVLinv.T @ LinvZ
+    r2blup = np.sum(uoVLinv ** 2, axis=0) / np.diag(uuV)
+
+    # method 3; use conjugate gradient with vec matrix ops over 'raw' LD and diagonal offset,
+    # instead of adding offset to LD matrix and solving
+    # or even just use raw genotype data vec matrix ops (if N_ref < SNP_obs)
+    #    (X'X + Ilambda) @ candidate = X' @ (X @ candidate) + lambda * candidate
+    uoVinv = cg(linear_op, uoV.T)
+    impZs = uoVinv @ obsZ
+    r2blup = np.diag(uoVinv @ uoV.T) / np.diag(uuV) # this can likely be further optimized with a product/sum op
+    """
     log.debug("Computing inverse of variance-covariance matrix for {} observed SNPs".format(nobs))
     ooVinv = pinvh(ooV, check_finite=False)
 
